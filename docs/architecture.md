@@ -1,6 +1,6 @@
 # Architecture — Universal RAG Evaluator
 
-Status: draft for build, revision 5, 2026-10-13. Implements `docs/PRD.md`; requirement numbers (FR-n) refer to it.
+Status: built, revision 7, 2026-10-13. Section 13 records how the code differs from this design and what was verified. Implements `docs/PRD.md`; requirement numbers (FR-n) refer to it.
 
 ## 1. Shape
 
@@ -80,14 +80,18 @@ Every command is also a button in the app (3.14).
 - A file yielding no text stops the job with the file name.
 - **Token pre-check**: tokens are estimated as one per character outside the Latin script plus one per three Latin-script characters. A document whose estimate exceeds `gen_max_input_tokens` stops the job. The judge receives whole documents too (unanswerable check), so the setting must be no larger than the smaller of the two models' inputs.
 - **Long text files**: a `.txt` or `.md` file is cut into pseudo-pages of about 3,000 characters at paragraph breaks, so that page-based rules (`multi_hop`, page spread, scenarios) work for it.
-- **First task of phase 1**: extract the nine mock PDFs and have a person read one page of each, the Thai ones especially. If `pypdf` output is unusable, switch to `pypdfium2` (also permissively licensed) and record the decision here.
+- **Extraction check, done 2026-10-13 on the nine mock PDFs** (by script, not yet read by a person):
+  - Decision: keep `pypdf` for the tool and `pypdfium2` for the reference target. Both extract every file. On the Thai files `pypdf` loses an occasional tone mark (it emits a NUL, 2 to 32 per file); `pypdfium2` reorders and duplicates fragments around the same glyphs, which is worse for quoting.
+  - The material is slides: 60 to 420 characters per page on average. Only pages with at least 100 normalised characters can hold an evidence quote: between 17 of 85 and 173 of 181 pages per file.
+  - Cross-extractor agreement, as a preview of matcher calibration: a 100-character span from one library is found by the matcher (3.9) in the other library's text of the same page in 98 to 100% of cases for the English files, 84 to 100% for the Thai files, and 80% for the one mixed Thai-and-code file. Criterion 2's 10% miss limit may therefore fail on Thai until extraction differences are handled.
+- **Eligible pages**: a page with fewer than 100 normalised characters cannot hold a quote and is skipped when questions are assigned to pages.
 
 **Normalisation**, used everywhere text is compared:
 
 1. Unicode NFKC.
 2. Lowercase.
 3. Remove all whitespace. PDF extraction inserts erratic spaces and line breaks, especially in Thai.
-4. Remove format characters (Unicode category Cf, which covers zero-width space and soft hyphen).
+4. Remove format and control characters (Unicode categories Cf and Cc, which cover zero-width space, soft hyphen, and the NUL that `pypdf` emits for a lost glyph).
 5. Remove punctuation (categories starting with P). This also joins words hyphenated at line breaks.
 6. Within each run of consecutive Thai combining marks (U+0E31, U+0E34 to U+0E3A, U+0E47 to U+0E4E), sort by code point. Extractors emit an upper vowel and a tone mark in either order, and NFKC does not make the two orders equal.
 
@@ -97,9 +101,9 @@ Other scripts with stacked marks may need the same treatment; none is handled in
 
 **Single questions**
 
-- **Counts**: per subject and type, candidates = target × `overgenerate`, rounded up. Each type's count is split evenly across the subject's documents; any remainder goes one each to documents in file-name order. A count of zero skips the type.
+- **Counts**: per subject and type, candidates = target × `overgenerate`, rounded up. Each type's count is split across the subject's documents in proportion to the text on their eligible pages (largest-remainder rounding, ties to file-name order), because the mock slide decks differ twentyfold in text. A count of zero skips the type.
 - **One call per document and type.** The prompt contains the whole document with page markers, the user's guidance text if any, and asks for that document's share of questions.
-- **Page spread**: the document's pages are divided into as many equal ranges as questions requested, and question i must take its first evidence quote from range i. Code checks this.
+- **Page spread**: the document's eligible pages are divided into as many equal ranges as questions requested, and question i must take its first evidence quote from range i. Code checks this.
 - `multi_hop` questions cite quotes from at least two pages of the same document.
 - `unanswerable` prompts ask for plausible in-domain questions the document does not answer.
 - Questions are written in the document's language. The first call per document also returns its ISO 639-1 code, stored as `source_lang`.
@@ -135,7 +139,7 @@ In this order, cheapest first (FR-3):
 
 | Check | How | Fails when |
 |---|---|---|
-| Quote | Code: normalised quote is a substring of the normalised cited page; normalised length 100 to 300 | Any evidence or hard-negative quote fails |
+| Quote | Code: normalised quote is a substring of the normalised cited page, or failing that the matcher (3.9) finds it on that page at coverage 0.8, which lets through a quote where the model restored a character the extractor lost; normalised length 100 to 300 | Any evidence quote fails |
 | Structure | Code: type rules, page-spread rule, scenario rules | e.g. `multi_hop` with evidence on one page; `same` follow-up sharing no evidence page with its first turn |
 | Duplicate | Code: character-trigram Jaccard similarity ≥ 0.8 between `resolved_question` and an earlier one in the subject | Near-duplicate |
 | Answerable + standalone | Judge, one call. Input: `question`, `resolved_question`, the gold key points, and the evidence quotes with no other document text. The judge is told to answer from the quotes alone, not from its own knowledge. Output: `{question_standalone, resolved_standalone, answer, key_points_covered: [bool], quotes_used: [bool]}` | `resolved_question` not standalone; a key point not covered; a `same` follow-up whose `question` is standalone (it would not test the conversation); any other question whose `question` is not standalone |
@@ -551,6 +555,8 @@ The schema, the adapter signature, the judge prompts and the resampling unit are
 
 ## 12. Known limits
 
+- **Hard negatives are deferred** (owner decision, 2026-10-13). v1 does not generate them, `hard_negative` is always `null`, and the hard-negative metric is not computed. The passages above that mention them describe the later design.
+
 - Whole-document prompting caps document size and makes dataset builds slow and input-heavy (PRD section 9). Larger documents need a windowed generator, which is not designed here.
 - Matcher constants, the Thai mark handling, the duplicate threshold and the easy/medium overlap threshold are starting values; only the matcher is calibrated in v1.
 - The reference target is one extractor and one chunking; matcher error on a particular real target may differ. Being lexical, it says nothing about cross-language retrieval quality.
@@ -564,3 +570,47 @@ The schema, the adapter signature, the judge prompts and the resampling unit are
 - Sequential calls throughout; one job at a time per dataset or run.
 - Garbled PDF text that is not empty passes ingestion and is caught only at human review.
 - Intervals ignore clustering within documents and judge noise.
+
+## 13. As built (2026-10-13)
+
+All five phases are implemented. This section records where the code differs from the sections above, and what has and has not been verified.
+
+### Differences from the design
+
+| Area | As built | Why |
+|---|---|---|
+| Modules | Added `score.py` (the score job), `labels.py` (label sampling and agreement), `review.py` and `material.py` (logic behind those app pages, without Streamlit), `text.py` (normalisation and the matcher) and `jobs.py` (lock, progress, stop). `metrics.py` holds only the retrieval metrics | Keeps every page's logic testable without a browser |
+| Build state | Each unfrozen dataset has a `build.json`: the batch plan and finished batches, drop counts per check, next ids, document languages, closed-book flags, reviewer counters | Makes every job resumable without repeating model calls |
+| Generation plan | A plan belongs to the set of documents it was made for, so adding a subject or a file to an unfrozen dataset plans new batches | Otherwise a second `generate` did nothing |
+| Bad model replies | Items in a reply are validated one by one; a malformed item is dropped and counted, the rest of the batch continues | One bad item used to discard the whole batch on every retry |
+| Document language | The generator's language code is lowercased, cut at `-` or `_`, and must be two letters; otherwise the batch is retried | "English" or "en-US" would break translation and language match |
+| Endpoint errors in scores | An errored question scores 0 on recall, reciprocal rank, answer recall, faithfulness and refusal accuracy, and only when the run measured that metric. It is left out of contradiction rate, false refusal rate and language match | A failed call is not a contradiction or a refusal, and an unmeasured metric must not read as 0 |
+| Judge replies | A reply with the wrong number of key points is asked for once more and never cached; then the question is a judge error. A provider 4xx other than 429 is recorded as a judge error for that question | A bad reply would otherwise be reused forever, or stop scoring for good |
+| Closed-book check | If the judge's reply is unusable the question is left unflagged and counted in the manifest as `closed_book_unchecked` | Otherwise the dataset could never be frozen |
+| Endpoint adapter | Redirects are refused; the answer and each context are limited to 20,000 characters and contexts to 50; any other 4xx is recorded without retry; unexpected adapter errors are recorded per question | A redirect re-sent the API key to the new host; unbounded replies can exceed the judge's input |
+| Stored addresses | Only scheme, host, port and path of `RAG_URL` are written to manifests and reports. Resuming a run against a different address is refused | Keys in a query string must not reach files |
+| Judge key | If `JUDGE_AI_URL` names a different host from the generator and no judge key is set, the tool stops | The generator's key must not be sent to another host |
+| Target text in judge prompts | `<` and `[` in answers and contexts are replaced with look-alike characters before they go into the prompt | Stops a target from closing the data markers and addressing the judge |
+| Frozen datasets | `run` and `score` re-hash `questions.jsonl` against the manifest and refuse on a mismatch; `translate` refuses a frozen dataset | A changed frozen set would silently invalidate comparisons |
+| Judge labels | Sampling skips decisions made by a different judge model or prompt version; a report looks up labels for the judge that scored that run | Labels for one judge must not validate another |
+| Manifest | Adds `frozen_shortfall` (targets minus what was frozen), beside `shortfall` (targets minus what survived validation) | The two differ after review rejections |
+| Dropped translations | Recorded in `build.json` and not counted as missing, so they do not block freeze; editing the source question allows a new attempt | — |
+| Unanswerable check | The judge's supporting quote is not verified by code | The candidate is dropped either way |
+| Privacy confirmation | Asked before generate, translate, freeze and score | All four send text to the model hosts |
+| File names | Uploads and subject names keep non-Latin scripts; only path parts and characters Windows forbids are removed | Thai file names were being turned into underscores |
+| Interrupted appends | A partial last line in a `.jsonl` file is ignored on read and cut off before the next append | A killed process must not corrupt the file |
+
+### What was verified
+
+- **181 automated tests pass.** Every model call in them is a stand-in; there was no API key on the build machine.
+- **End to end on the nine mock PDFs with a stand-in model**: generate (361 candidates), resume with no repeated calls, translate, freeze (273 questions plus 115 translated variants, no shortfall), three runs against the reference target, score, compare. Comparing a run with itself gave "no detectable difference"; random retrieval was reported as worse on Recall@k.
+- **Background jobs on Windows**: a job started the way the app starts them ran to completion.
+- **The app starts and serves** on localhost; every page renders without error in an empty project, with an unfrozen dataset, with a frozen dataset and with a scored run.
+- **An independent code review** of the non-app modules found 9 ranked problems and 11 smaller ones; all but two were fixed, each with a regression test. Left as they are: `temperature=0` is sent to every model (some model families reject it), and two jobs started in the same instant on one directory could both take the lock.
+
+### What was not verified
+
+- **Nothing has run against a real model or a real RAG endpoint.** Prompt quality, drop rates, question quality, translation quality and judge behaviour are unknown.
+- **PRD success criteria 2, 3 and 8** need human labels and real models and are unmeasured. Criteria 1, 4, 5, 6 and 7 were exercised only with the stand-in model, which proves the mechanics and nothing about quality.
+- **The app in a browser**: selecting a row in the Review table, the progress refresh and Stop button, upload and delete, and the labelling flows were never clicked by a person. `app.py`, `review.py` and `material.py` were not part of the independent code review.
+- **The extraction check** was done by script; no person has read the extracted Thai text.

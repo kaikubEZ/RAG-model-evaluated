@@ -1,0 +1,22 @@
+$document
+
+Task: unanswerable
+
+Above is one document, with a [[page N]] marker before each page.
+
+Question:
+$question
+
+Decide whether the document gives the answer to this question, using only the document and not your own knowledge.
+
+Definitions:
+- Standalone: A person who has not seen the document or any earlier turn knows what is being asked. "What does the author conclude in section 3?" is not standalone.
+
+Do these steps:
+1. "standalone": is the question standalone?
+2. "answer_found": true if the document states the answer, even partly; false if it does not.
+3. "quote": if answer_found, copy the sentence that gives the answer exactly from the document; otherwise an empty string.
+4. "closest_passage": copy exactly from the document the passage that comes closest to answering the question, or an empty string if nothing is close.
+
+Return JSON only, in exactly this shape:
+{"standalone": true, "answer_found": false, "quote": "", "closest_passage": "..."}

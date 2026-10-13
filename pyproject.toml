@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rageval"
+version = "0.1.0"
+description = "Universal RAG Evaluator"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "openai",
+    "pypdf",
+    "pydantic>=2",
+    "python-dotenv",
+    "numpy",
+    "streamlit",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pypdfium2"]
+
+[project.scripts]
+rageval = "rageval.cli:main"
+
+[tool.setuptools]
+packages = ["rageval"]
+
+[tool.setuptools.package-data]
+rageval = ["prompts/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

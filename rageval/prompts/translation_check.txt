@@ -1,0 +1,16 @@
+Task: translation_check
+
+You compare source items with their translations.
+
+Definition:
+- Translation same: The translated question would be answered by exactly the same facts; a translated key point states the same fact, with names and numbers intact. "at least 2.75" rendered as "more than 2.75" is not the same.
+
+For each item, decide:
+- "question_same": true if the translated "question" and the translated "resolved_question" both ask the same thing as the source ones.
+- "key_points_same": for each source key point, in order, true if the translated key point at the same position states the same fact.
+
+Items (source and translation):
+$items
+
+Return JSON only, in exactly this shape:
+{"items": [{"id": "law-0003", "question_same": true, "key_points_same": [true]}]}

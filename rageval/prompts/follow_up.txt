@@ -1,0 +1,36 @@
+$document
+
+Task: follow_up
+Document name: $doc
+$guidance
+
+Above is one document, with a [[page N]] marker before each page. Write follow-up questions: a follow-up is the second question a user asks in a conversation, after a first-turn question has been asked and answered. Write the questions and key points in the document's own language.
+
+Number of follow-ups to write, by scenario:
+$counts
+
+First-turn questions from this document (id | type | evidence pages | question):
+$firsts
+
+First-turn questions from other documents of the same subject (id | question):
+$others
+
+Scenarios:
+- same: still about the same thing as the first turn, and worded so that it cannot be understood without the first turn (for example "and when did it end?"). Its evidence must include at least one page that the first turn's evidence uses. The first turn comes from this document's list.
+- similar: a related topic in this document. Its evidence must be on pages the first turn's evidence does not use. The first turn comes from this document's list.
+- diff_topic: an unrelated topic. Its evidence comes from this document, and the first turn comes from the list of other documents.
+
+Definitions:
+- Key point: One statement that can be judged true or false on its own. "TCP is connection-oriented" is one; "TCP is connection-oriented and reliable" is two.
+- Evidence quote: One contiguous verbatim span, 100 to 300 characters after normalisation (roughly one to three sentences), that states the key point, not merely one that appears near it. The length counts letters and digits only, not spaces or punctuation, so aim for roughly 130 to 350 characters as written. A page with too little text for that cannot supply a quote; use another page.
+- Resolved question: The follow-up rewritten so that it can be understood with no conversation before it, asking exactly the same thing.
+
+Rules:
+- Every follow-up names its first-turn question by id in "previous_id".
+- "question" is what the user would type. For "same", it must lean on the conversation ("it", "that rule", "and after that?") so that it cannot be understood alone, and "resolved_question" spells it out. For "similar" and "diff_topic", "question" is understandable alone and "resolved_question" is identical to it.
+- A follow-up is always answerable. "question_type" is one of fact, definition, comparison, multi_hop, exception (not unanswerable). A multi_hop follow-up has quotes from at least two different pages.
+- Each follow-up has one to four key points ("gold_ans") and at least one evidence quote from this document. Copy each quote exactly from the page you name, without changing any character.
+- Do not write two follow-ups that ask the same thing.
+
+Return JSON only, in exactly this shape:
+{"language": "<ISO 639-1 code of the document's language>", "items": [{"scenario": "same", "previous_id": "law-0003", "question": "...", "resolved_question": "...", "question_type": "fact", "gold_ans": ["key point"], "gold_evidence": [{"page": 4, "quote": "verbatim text"}]}]}

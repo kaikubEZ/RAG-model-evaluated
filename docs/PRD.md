@@ -1,6 +1,6 @@
 # Product Requirements Document — Universal RAG Evaluator
 
-Status: draft for build, revision 5, 2026-10-13. Supersedes the earlier PRD and `flaw.md`. Background research is in `research/`. Section 14 lists what each revision changed.
+Status: draft for build, revision 6, 2026-10-13. Supersedes the earlier PRD and `flaw.md`. Background research is in `research/`. Section 14 lists what each revision changed.
 
 ## 1. Overview
 
@@ -32,7 +32,6 @@ Teams building RAG systems over private documents have no test set for those doc
 | A question the documents cannot answer | `unanswerable` type |
 | A follow-up question in a conversation, on the same, a similar, or a different topic | Two-turn follow-ups (FR-12) |
 | A question in a different language from the documents | Test languages (FR-13) |
-| A passage that looks right but is not | Hard negatives |
 
 ### In scope for v1
 
@@ -45,6 +44,8 @@ Teams building RAG systems over private documents have no test set for those doc
 ### Non-goals for v1
 
 "Every possible real use" is not reachable; these are left out deliberately and listed so nobody assumes they are tested.
+
+- **Hard negatives**, deferred by the owner on 2026-10-13. v1 does not generate them and does not compute the hard-negative rate; `hard_negative` stays in the schema as `null`. Mentions of them elsewhere in this document describe the later design.
 
 - Conversations longer than two turns.
 - Vague questions where the right response is to ask the user what they mean.
@@ -454,10 +455,14 @@ Limits of the method that users should know. Sources are summarised in `research
 Still open:
 
 - Whether translated variants should require human review when a reviewer who reads the language is available. Currently optional and counted.
-- **Hard negatives**: the reviewer suggests deferring them. They were in the original specification, so they are kept; they add generation effort and a second matching risk for a metric that rests on few questions.
+- Resolved 2026-10-13: hard negatives are deferred (see non-goals).
 - The defaults in FR-14 are starting values, not derived from data.
 
 ## 14. Revision history
+
+**Built 2026-10-13.** All five phases are implemented; see architecture section 13 for differences from the design and for what has and has not been verified. No success criterion has yet been measured with a real model.
+
+**Revision 6** — owner deferred hard negatives; extraction check on the mock PDFs recorded in the architecture (slides with little text per page; an occasional lost Thai tone mark), leading to eligible pages, a proportional split of questions across documents, and a tolerant quote check.
 
 **Revision 5** — after the reviewer's pass on revision 3: `same` follow-ups must depend on the conversation; scores reported per group and never pooled, with `compare` on a named group; extra languages added to the always-present source language; history support off until confirmed; freeze keeps the first turn of every follow-up; closed-book check moved to freeze (about 170 fewer calls); judge prompts fixed in phase 2 and labels kept per prompt; reference target translates queries; job lock, progress and stop rules; review as table plus form; scenario labels correctable; cloud-sync warning.
 
