@@ -1,65 +1,84 @@
-# Universal RAG Evaluator — Open Source
+# rageval: test your RAG system with questions made from your own documents
 
-An open-source universal framework to automatically evaluate Retrieval-Augmented Generation (RAG) endpoints against any content, using AI-generated questions.
+rageval writes test questions from your course documents, asks them to your RAG endpoint, and scores the answers. It works with any OpenAI-compatible AI model and any RAG endpoint.
 
----
-
-## What it does
-
-1. **Ingest your material** — upload or point to your source content (PDFs with a text layer, `.txt`, `.md`). Each document must fit in the question-generation model's input.
-2. **Configure an AI generator** — set your AI API (for question generation) via `.env`.
-3. **Generate and review test questions** — the framework calls the configured AI to generate questions from your material; you review and approve them before they are used.
-4. **Point to a target API** — specify the RAG endpoint you want to test.
-5. **Automatic RAG evaluation** — the framework runs the endpoint, compares results against the source material, and produces evaluation metrics automatically.
+**You need:** Python 3.11 or newer, an API key for an OpenAI-compatible model, and (for scoring) a RAG endpoint.
 
 ---
 
-## Project goals
+## Start in 3 steps
 
-- Open source and universal: works with any RAG endpoint, any source material.
-- End-to-end automation: from ingestion to evaluation report.
-- Configurable AI backend: bring your own LLM API for question generation.
+**1. Install**
 
----
-
-## Quick start
-
-Needs Python 3.11 or newer.
-
+Windows:
 ```
 python -m venv .venv
-.venv\Scriptsctivate          (Windows; on macOS/Linux: source .venv/bin/activate)
+.venv\Scripts\activate
 pip install -e .[test]
-rageval app             # one app, two features: dataset generation and auto evaluation
+```
+macOS / Linux:
+```
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[test]
 ```
 
-`rageval app` opens one app in your browser with two features, chosen at the top of the sidebar. **Feature 1: Dataset generation** is one numbered page per step:
+**2. Open the app**
+```
+rageval app
+```
+Your browser opens the app. Everything else happens there, one numbered step at a time. Each page explains what to do and ends with a **Next** button.
 
-1. **Setup**: API key, address and model for question generation (any OpenAI-compatible API).
-2. **Material**: create a subject and upload PDFs (with a text layer), `.txt` or `.md` files.
-3. **Questions**: write English questions from the material, then approve the good ones.
-4. **Answers**: write the English reference answer and required facts for each approved question, then approve them.
-5. **Translate** (optional): type any language codes (`th, zh`) to translate questions and answers.
-6. **Export**: freeze the dataset and download `dataset.csv`.
-
-Every page says what to do, shows how far each step has got, and ends with a **Next** button. **Feature 2: Auto evaluation** is optional: it runs a RAG endpoint on a `dataset.csv` (from Feature 1 or any other source) and scores it, in five numbered steps.
-
-The program is two parts joined by the CSV in `docs/dataset-contract.md`. Data generation, in order: `rageval-datagen generate` (English questions), `answer` (English answers), `translate`, `freeze`. Evaluation: `rageval-eval run`, `score`, `compare`.
-
-Your endpoint must accept `POST {"question": "...", "history": [...]}` and return `{"answer": "...", "contexts": [{"text": "..."}]}`; `contexts` is optional but needed for retrieval scores. Other shapes need a small adapter function in `rageval/evaluation/adapters.py`.
-
-Text from your documents is sent to the model provider you configure. `material/`, `datasets/`, `runs/`, `labels/`, `settings.json` and `.env` are gitignored.
+**3. Follow the steps** (below).
 
 ---
+
+## Feature 1: make a dataset from your documents
+
+| Step | What you do |
+|---|---|
+| 1. Setup | Enter the API key, address and model of the AI that writes the questions. Press **Test** to check them. |
+| 2. Material | Create a subject (a course or topic) and upload its files: PDF with selectable text, `.txt` or `.md`. |
+| 3. Questions | The AI writes English questions. You read them and approve the good ones. |
+| 4. Answers | The AI writes an answer and the required facts for each approved question. You approve them. |
+| 5. Translate | Optional. Type language codes such as `th, zh` to translate. |
+| 6. Export | Finish the dataset and download `dataset.csv`. |
+
+## Feature 2: score your RAG endpoint (optional)
+
+Switch to it at the top of the sidebar. You can use the `dataset.csv` from Feature 1, or upload your own.
+
+| Step | What you do |
+|---|---|
+| 1. Setup | Enter the checking model and your RAG endpoint address. Press **Test**. |
+| 2. Run and score | Choose a dataset, press **Start run**, then **Score the answers**. |
+| 3. Results | Read the scores. Download `report.md`. |
+| 4. Compare | Compare two runs to see whether a change helped. |
+| 5. Labelling | Optional. Check the checking model against your own judgement. |
+
+Your RAG endpoint must accept `POST {"question": "...", "history": [...]}` and return `{"answer": "...", "contexts": [{"text": "..."}]}`. `contexts` is optional but needed for the evidence scores. Other formats need a small function in `rageval/evaluation/adapters.py`.
+
+---
+
+## Good to know
+
+- **Privacy:** text from your documents is sent to the AI provider you configure. The app asks you to tick a box before it does this.
+- **Jobs keep running** if you close the browser tab. Press **Stop** to stop one; starting again continues where it left off.
+- **Settings:** keys go in `.env` (see `.env.example`), other options in `settings.json`. Both are saved by the Setup pages, so you do not have to edit them by hand.
+- **Private files:** `material/`, `datasets/`, `runs/`, `labels/`, `settings.json` and `.env` are gitignored.
+- **Command line:** every step can also run without the app: `rageval-datagen generate | answer | translate | freeze` and `rageval-eval run | score | compare`.
+- **Tests:** run `pytest`.
 
 ## Status
 
-Built from `docs/PRD.md` and `docs/architecture.md`. The code passes its tests with a stand-in model, and has run end to end on sample PDFs with that stand-in. It has **not yet been run against a real model or a real RAG endpoint**, so question quality, judge agreement and matcher accuracy (success criteria 2, 3 and 8 in the PRD) are unmeasured. See section 13 of the architecture for what was and was not verified.
+The code passes its tests with a stand-in model and has run end to end on sample PDFs. It has **not yet been run against a real model or a real RAG endpoint**, so question quality, checking-model agreement and evidence-matching accuracy are unmeasured (see `docs/PRD.md`, success criteria 2, 3 and 8, and section 13 of `docs/architecture.md`).
 
-Run the tests with `pytest`.
+## More documents
 
----
+- `docs/PRD.md`: what the program must do
+- `docs/architecture.md`: how it is built
+- `docs/dataset-contract.md`: the `dataset.csv` format
 
 ## License
 
-See `LICENSE` for details.
+See `LICENSE`.
