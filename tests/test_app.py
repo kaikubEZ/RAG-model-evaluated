@@ -1,3 +1,4 @@
+import json
 import random
 import time
 from pathlib import Path
@@ -6,7 +7,7 @@ import pytest
 from streamlit.proto.TextInput_pb2 import TextInput
 from streamlit.testing.v1 import AppTest
 
-from rageval import csvio, settings, store
+from rageval import csvio, jobs, settings, store
 from rageval.evaluation import dataset
 from rageval.datagen import material, review
 from rageval.schema import Answer, Evidence, Page, Question, Score
@@ -337,17 +338,30 @@ def test_setup_saves_env_and_settings(root):
     assert settings.load().top_k == 5
 
 
-def test_generate_saves_settings_with_extra_language_codes(root):
-    at = page("Generate")
-    assert not at.exception
-    at.multiselect[0].select("th")
-    next(w for w in at.text_input if w.label.startswith("Other language codes")).input("sv, pl")
-    next(b for b in at.button if b.label == "Save settings").click().run()
+def test_translate_step_takes_any_language_codes_the_user_types(root, monkeypatch):
+    from rageval.datagen import translate
+    assert translate.parse_langs("th, ZH  ja;th") == ["th", "zh", "ja"]
+    for bad in ("swedish", "t", "en", "th, 12"):
+        with pytest.raises(ValueError):
+            translate.parse_langs(bad)
+    state(root, "draft")
+    monkeypatch.setenv("GEN_AI_URL", "https://api.example.test/v1")
+    monkeypatch.setenv("GEN_AI_API_KEY", "k")
+    monkeypatch.setenv("GEN_AI_MODEL", "m")
+    started = []
+    monkeypatch.setattr(jobs, "start_detached", lambda module, args: started.append(args))
+    at = page("Review")
+    assert not at.exception, [e.value for e in at.exception]
+    box = next(w for w in at.text_input if w.label.startswith("Translate into"))
+    box.input("th, zh").run()
+    next(c for c in at.checkbox if c.key == "privacy_review").check().run()
+    next(b for b in at.button if b.label == "Translate").click().run()
     assert not at.exception and not at.error
-    assert settings.load().extra_langs == ["th", "sv", "pl"]
-    next(w for w in at.text_input if w.label.startswith("Other language codes")).input("swedish")
-    next(b for b in at.button if b.label == "Save settings").click().run()
-    assert "Not a language code" in at.error[0].value and settings.load().extra_langs == ["th", "sv", "pl"]
+    assert settings.load().extra_langs == ["th", "zh"] and started == [["translate", "--yes"]]
+    box = next(w for w in at.text_input if w.label.startswith("Translate into"))
+    box.input("swedish").run()
+    next(b for b in at.button if b.label == "Translate").click().run()
+    assert "Not a language code" in at.error[0].value and settings.load().extra_langs == ["th", "zh"]
 
 
 def test_generate_page_lists_new_dataset_and_old_drafts(root):
@@ -362,3 +376,20 @@ def test_generate_page_lists_new_dataset_and_old_drafts(root):
     assert "2 questions so far" in box.format_func(box.value)
     box.select("New dataset").run()
     assert any(w.label.startswith("Name for the new dataset") for w in at.text_input)
+
+
+def test_review_table_shows_the_answer_and_evidence(root):
+    state(root, "draft")
+    ds = "20260101-000000"
+    rows = review.load(ds)
+    store.write_jsonl(store.datasets_dir() / ds / "candidates.jsonl", [
+        rows[0].model_copy(update={"reference_answer": "THE REFERENCE ANSWER", "answer_status": "candidate"}), rows[1]])
+    at = page("Review")
+    assert not at.exception, [e.value for e in at.exception]
+    df = at.dataframe[0].value
+    assert list(df.columns[:len(csvio.COLUMNS)]) == csvio.COLUMNS  # the contract's columns, in its order
+    first = df.iloc[0]
+    assert first["case_id"] == "law-001-en" and first["reference_answer"] == "THE REFERENCE ANSWER"
+    facts, groups = json.loads(first["required_facts_json"]), json.loads(first["evidence_json"])
+    assert facts[0]["fact_id"] == "f1" and groups[0]["alternatives"][0]["document_id"] == "law/a.txt"
+    assert first["answer status"] == "candidate"

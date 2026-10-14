@@ -139,7 +139,7 @@ def _vet(st: _State, q: Question, pool: list[Question], label: str, rng: tuple[i
     if not check:
         st.job.check_stop()
         try:
-            out, check = validate.judge_checks(q, st.docs[q.subject])
+            out, check = validate.judge_checks(q, st.docs[q.subject]) if st.s.judge_checks else (q, None)
         except llm.BadReply:
             check = "bad_reply"
         if not check and (validate.check_row(out, st.pmap, pool)):

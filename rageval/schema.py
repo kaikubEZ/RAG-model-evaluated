@@ -29,6 +29,7 @@ class Evidence(Row):
     doc: str
     page: int
     quote: str
+    facts: list[str] = []  # ids (f1, f2...) of the required facts this quote supports
 
 
 class Question(Row):

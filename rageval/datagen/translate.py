@@ -1,6 +1,7 @@
 """`rageval-datagen translate`, stage 3: variants of approved questions in the extra test languages (architecture 3.5)."""
 import hashlib
 import json
+import re
 
 from pydantic import BaseModel, ValidationError
 
@@ -8,6 +9,41 @@ from .. import jobs, llm, settings, store
 from ..schema import Question
 
 BATCH = 10
+BASE_LANG = "en"
+# the writing system of a target language: its translation must contain at least one of these characters
+SCRIPTS = {"th": "\u0e00-\u0e7f", "zh": "\u4e00-\u9fff", "ja": "\u3040-\u30ff\u4e00-\u9fff", "ko": "\uac00-\ud7af",
+           "ru": "\u0400-\u04ff", "uk": "\u0400-\u04ff", "ar": "\u0600-\u06ff", "hi": "\u0900-\u097f",
+           "he": "\u0590-\u05ff", "el": "\u0370-\u03ff"}
+REMINDER = ("Your previous reply left some of these items in English. Translate every word of \"question\", "
+            "\"resolved_question\" and \"reference_answer\" into the target language; copying the English text is wrong.")
+
+
+def is_translated(source: str, out: str, lang: str) -> bool:
+    """A translation must differ from its source and, for a language with its own script, be written in it."""
+    if not source.strip():
+        return True
+    if out.strip() == source.strip():
+        return False
+    script = SCRIPTS.get(lang.lower().split("-")[0])
+    return bool(re.search(f"[{script}]", out)) if script else True
+
+
+def _variant_ok(src: Question, v) -> bool:
+    """`v` is a translated Question or _Translated; the question, its resolved form and the answer must really be translated."""
+    lang = getattr(v, "lang", None)
+    return all(is_translated(a, b or "", lang) for a, b in (
+        (src.question, v.question), (src.resolved_question, v.resolved_question), (src.reference_answer or "", v.reference_answer or "")))
+
+
+def parse_langs(raw: str) -> list[str]:
+    """Language codes typed by the user, "th, zh" or "th zh", as a clean list; raises ValueError on a bad code."""
+    codes = list(dict.fromkeys(c.lower() for c in re.split(r"[,\s;]+", raw) if c))
+    bad = [c for c in codes if not re.fullmatch(r"[a-z]{2,3}(-[a-z0-9]{2,8})?", c)]
+    if bad:
+        raise ValueError(f"Not a language code: {', '.join(bad)}. Use codes such as th, zh, ja, fr.")
+    if BASE_LANG in codes:
+        raise ValueError(f"{BASE_LANG} is the baseline language of the questions; leave it out.")
+    return codes
 
 
 class _Translated(BaseModel):
@@ -65,10 +101,27 @@ def _todo(rows: list[Question], build: dict, lang: str) -> list[Question]:
     return sorted(out, key=lambda q: q.is_follow_up)
 
 
+def untranslated(rows: list[Question]) -> set[str]:
+    """Ids of variants nobody has reviewed whose question or answer is still the source text."""
+    by_id = {r.id: r for r in rows}
+    out = set()
+    for r in rows:
+        src = by_id.get(f"{r.base_id}-{r.source_lang}")
+        if r.is_translated and not r.translation_reviewed and src and not _variant_ok(src, r):
+            out.add(r.id)
+    return out
+
+
+def _clean(rows: list[Question]) -> list[Question]:
+    bad = untranslated(rows)
+    bad |= {r.id for r in rows if r.previous_id in bad}  # a follow-up points at its first turn's variant
+    return [r for r in rows if r.id not in bad]
+
+
 def missing(dataset_id: str) -> list[tuple[str, str]]:
     """(base_id, lang) pairs that still need a variant. Variants reported as dropped are not missing."""
     d = store.datasets_dir() / dataset_id
-    rows = store.read_jsonl(d / "candidates.jsonl", Question)
+    rows = _clean(store.read_jsonl(d / "candidates.jsonl", Question))
     build = store.read_json(d / "build.json")
     return [(q.base_id, lang) for lang in settings.load().extra_langs for q in _todo(rows, build, lang)]
 
@@ -78,21 +131,30 @@ def drop_variants(rows: list[Question], base_id: str) -> list[Question]:
     return [r for r in rows if not (r.base_id == base_id and r.is_translated)]
 
 
-def _translate(batch: list[Question], lang: str) -> dict[str, _Translated]:
-    """One translate call and one meaning check; only the items that pass are returned."""
+def _translate(batch: list[Question], lang: str, retry: bool = False) -> dict[str, _Translated]:
+    """One translate call and the checks; only the items that pass are returned."""
     items = [{"id": q.id, "question": q.question, "resolved_question": q.resolved_question,
               "reference_answer": q.reference_answer or "", "gold_ans": q.gold_ans}
              for q in batch]
     try:
-        translated = _valid(llm.ask("gen", llm.render("translate", lang=lang, items=items), _Reply), _Translated)
+        translated = _valid(llm.ask("gen", llm.render("translate", lang=lang, items=items, reminder=REMINDER if retry else ""), _Reply), _Translated)
         pairs = [{"id": q.id, "source": item, "translation": translated[q.id].model_dump()}
                  for q, item in zip(batch, items) if q.id in translated]
-        checks = _valid(llm.ask("judge", llm.render("translation_check", items=pairs), _Reply), _Checked)
+        checks = (_valid(llm.ask("judge", llm.render("translation_check", items=pairs), _Reply), _Checked)
+                  if settings.load().judge_checks else None)
     except llm.BadReply:
         return {}
     ok = {}
     for q in batch:
-        t, c = translated.get(q.id), checks.get(q.id)
+        t = translated.get(q.id)
+        if t and not all(is_translated(a, b, lang) for a, b in (
+                (q.question, t.question), (q.resolved_question, t.resolved_question), (q.reference_answer or "", t.reference_answer))):
+            continue  # still English: counts as failed, so it is asked again and then reported
+        if checks is None:  # judge off: the translation is kept for the reviewer to read
+            if t and len(t.gold_ans) == len(q.gold_ans):
+                ok[q.id] = t
+            continue
+        c = checks.get(q.id)
         if t and c and c.question_same and len(t.gold_ans) == len(q.gold_ans) == len(c.key_points_same) and all(c.key_points_same):
             ok[q.id] = t
     return ok
@@ -108,6 +170,10 @@ def run(dataset_id: str) -> dict:
     created = dropped = 0
     with jobs.Job(d, "translate") as job:
         build = store.read_json(d / "build.json")
+        before = len(rows)
+        rows = _clean(rows)  # variants that were left in English by an earlier run are made again
+        redone = before - len(rows)
+        build.pop("translation_dropped", None)  # pressing Translate tries every missing variant again
         for lang in settings.load().extra_langs:
             todo = _todo(rows, build, lang)
             job.step(f"translate to {lang}", (len(todo) + BATCH - 1) // BATCH)
@@ -115,7 +181,7 @@ def run(dataset_id: str) -> dict:
                 batch = todo[start:start + BATCH]
                 done = _translate(batch, lang)
                 if len(done) < len(batch):  # one more try for the ones that failed
-                    done |= _translate([q for q in batch if q.id not in done], lang)
+                    done |= _translate([q for q in batch if q.id not in done], lang, retry=True)
                 for q in batch:
                     t = done.get(q.id)
                     previous = None
@@ -138,4 +204,4 @@ def run(dataset_id: str) -> dict:
                 store.write_jsonl(d / "candidates.jsonl", rows)
                 store.write_json(d / "build.json", build)
                 job.tick(lang)
-    return {"created": created, "dropped": dropped}
+    return {"created": created, "dropped": dropped, "redone": redone}

@@ -19,6 +19,7 @@ class Settings(BaseModel):
     overgenerate: float = Field(1.3, ge=1.0, le=5.0)
     extra_langs: list[str] = []
     generation_guidance: str = ""
+    judge_checks: bool = False  # AI judge on generated questions, answers and translations, and the closed-book check; costly
     scope: Literal["current", "published"] = "current"  # CHAT is_deployed_key: current=false, published=true
     top_k: int = Field(5, ge=1)
     rag_adapter: str = "http_json"

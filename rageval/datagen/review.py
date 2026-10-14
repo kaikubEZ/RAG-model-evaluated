@@ -1,8 +1,9 @@
 """The logic behind the Review page: load, save, approve, summarise (architecture 3.6). No Streamlit here."""
+from functools import lru_cache
 from pathlib import Path
 
 from . import translate, validate
-from .. import jobs, settings, store
+from .. import csvio, jobs, llm, settings, store
 from ..schema import Page, Question
 
 
@@ -156,3 +157,56 @@ def summary(dataset_id: str) -> dict:
         "answers": count(lambda r: r.answer_status if r.answerable and not r.is_translated and r.status == "approved" else None), "targets": targets, "shortfall": shortfall,
         "bulk_approved": build.get("bulk_approved", 0), "scenario_overrides": build.get("scenario_overrides", 0),
     }
+
+
+@lru_cache(maxsize=512)
+def _file_hash(path: str, mtime: float, size: int) -> str:
+    return store.sha256(Path(path))
+
+
+def contract_rows(dataset_id: str, shown: list[Question]) -> list[dict[str, str]]:
+    """The rows exactly as freeze will write them to dataset.csv, so the Review table shows the contract's columns."""
+    d = _dir(dataset_id)
+    everyone = {q.id: q for q in load(dataset_id)}
+    pages_file = d / "pages.jsonl"
+    corpus = store.sha256(pages_file) if pages_file.exists() else ""
+    hashes: dict[str, str | None] = {}
+    for q in shown:
+        for e in q.gold_evidence:
+            if e.doc not in hashes:
+                p = store.material_dir() / e.doc
+                hashes[e.doc] = _file_hash(str(p), p.stat().st_mtime, p.stat().st_size) if p.exists() else None
+    try:
+        model = llm.model_name("gen")
+    except SystemExit:
+        model = ""
+    pmap = pages(dataset_id)
+    return [csvio.to_row(q, everyone, scope=settings.load().scope, corpus_version=corpus, source_hashes=hashes,
+                         generator_model=model, pages=pmap) for q in shown]
+
+
+def clear_answers(dataset_id: str, ids: list[str]) -> int:
+    """Discard drafted answers that were never approved, so the answer step can write them again."""
+    d = _writable(dataset_id)
+    rows = store.read_jsonl(d / "candidates.jsonl", Question)
+    wanted, out, changed = set(ids), [], 0
+    for r in rows:
+        if r.id in wanted and r.answerable and not r.is_translated and r.answer_status == "candidate":
+            r = r.model_copy(update={"answer_status": "none", "gold_ans": [], "reference_answer": None, "note": None,
+                                     "gold_evidence": [e.model_copy(update={"facts": []}) for e in r.gold_evidence]})
+            changed += 1
+        out.append(r)
+    store.write_jsonl(d / "candidates.jsonl", out)
+    return changed
+
+
+def discard_translations(dataset_id: str, langs: list[str]) -> int:
+    """Delete every translated variant in `langs`, reviewed or not, so that Translate makes them again."""
+    d = _writable(dataset_id)
+    rows = store.read_jsonl(d / "candidates.jsonl", Question)
+    keep = [r for r in rows if not (r.is_translated and r.lang in langs)]
+    store.write_jsonl(d / "candidates.jsonl", keep)
+    build = store.read_json(d / "build.json")
+    if build.pop("translation_dropped", None) is not None:
+        store.write_json(d / "build.json", build)
+    return len(rows) - len(keep)

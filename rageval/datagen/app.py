@@ -1,10 +1,9 @@
 """The data-generation app: Setup, Material, Generate, Review. Pick a page in the sidebar."""
-import re
 
 import pandas as pd
 import streamlit as st
 
-from rageval import jobs, llm, settings, store
+from rageval import csvio, jobs, llm, settings, store
 from rageval.datagen import answer, freeze, material, review, translate
 from rageval.schema import QUESTION_TYPES, SCENARIOS, Question
 from rageval.ui import (STOP_NOTE, attempt, env_form, flash, job_status, privacy, purge, run_app, ss, start_job,
@@ -13,7 +12,6 @@ from rageval.ui import (STOP_NOTE, attempt, env_form, flash, job_status, privacy
 MODULE = "rageval.datagen.cli"
 ENV_KEYS = [("GEN_AI_API_KEY", True), ("GEN_AI_URL", False), ("GEN_AI_MODEL", False),
             ("JUDGE_AI_API_KEY", True), ("JUDGE_AI_URL", False), ("JUDGE_AI_MODEL", False)]
-COMMON_LANGS = ["en", "th", "zh", "ja", "ko", "es", "fr", "de", "vi", "id", "pt", "ru", "ar", "hi", "it", "ms", "tr"]
 SCOPES = ["current", "published"]
 NEW_DATASET = "New dataset"
 
@@ -73,7 +71,6 @@ def material_page() -> None:
 
 def generate_page() -> None:
     s = settings.load()
-    langs = sorted(set(COMMON_LANGS) | set(s.extra_langs))
     with st.form("generate_settings"):
         st.caption("Step 1 writes English questions with their evidence. Step 2 (answers) and step 3 (translation) "
                    "start from the Review page once you have approved questions.")
@@ -83,21 +80,16 @@ def generate_page() -> None:
         per_sc = {sc: st.number_input(sc, min_value=0, value=s.follow_ups_per_subject.get(sc, 0), step=1) for sc in SCENARIOS}
         over = st.number_input("Over-generation factor", min_value=1.0, max_value=5.0, value=float(s.overgenerate), step=0.1)
         guidance = st.text_area("Generation guidance (optional)", value=s.generation_guidance)
-        picked = st.multiselect("Translate into (step 3, after the English answers are approved)", langs, default=s.extra_langs)
-        other = st.text_input("Other language codes, separated by commas (ISO 639-1, for example sv, pl)")
+        judge = st.checkbox("Use AI judge checks (on questions, answers and translations; more accurate, much more expensive)",
+                            value=s.judge_checks)
         biggest = st.number_input("Largest document for the generator, in tokens", min_value=1000, value=s.gen_max_input_tokens, step=1000)
         saved = st.form_submit_button("Save settings")
     if saved:
         def save():
-            extra = [c.strip().lower() for c in other.split(",") if c.strip()]
-            bad = [c for c in extra if not re.fullmatch(r"[a-z]{2,3}", c)]
-            if bad:
-                raise ValueError(f"Not a language code: {', '.join(bad)}. Use two-letter codes such as sv.")
             settings.save(settings.Settings.model_validate({
                 **s.model_dump(), "questions_per_subject": {t: int(n) for t, n in per_type.items()},
                 "follow_ups_per_subject": {sc: int(n) for sc, n in per_sc.items()}, "overgenerate": over,
-                "generation_guidance": guidance, "extra_langs": list(dict.fromkeys(picked + extra)),
-                "gen_max_input_tokens": int(biggest)}))
+                "generation_guidance": guidance, "judge_checks": judge, "gen_max_input_tokens": int(biggest)}))
         if attempt(save)[0]:
             st.rerun()
     s = settings.load()
@@ -116,9 +108,6 @@ def generate_page() -> None:
         docs = sum(len(sub["files"]) for sub in subjects)
         st.caption(f"Roughly {docs * active} generator calls and {len(subjects) * cands} judge calls for a first pass; "
                    "refills and translations add more.")
-    for lang in s.extra_langs:
-        st.warning(f"{lang}: every question is also translated to {lang}. Its judged scores carry a warning until 150 "
-                   f"judge decisions are labelled by someone who reads {lang}.")
     drafts = [i for i in store.list_ids(store.datasets_dir())[::-1] if not store.is_frozen(i)]
     if "goto_gen" in ss:
         ss["gen_ds"] = ss.pop("goto_gen")
@@ -180,11 +169,18 @@ def review_page() -> None:
                                                  ("Language", "lang"), ("Status", "status")])]
     fields = ["subject", "question_type", "scenario", "lang", "status"]
     shown = [r for r in rows if all(p == "all" or str(getattr(r, f) or "") == p for p, f in zip(pick, fields))]
-    event = st.dataframe(
-        pd.DataFrame([{"id": r.id, "subject": r.subject, "type": r.question_type, "scenario": r.scenario or "",
-                       "lang": r.lang, "status": r.status, "answer": r.answer_status if r.answerable else "n/a", "check failed": bool(r.note), "question": r.question[:120]}
-                      for r in shown]),
-        hide_index=True, on_select="rerun", selection_mode="single-row", key=f"table|{ds}", width="stretch")
+    # the columns of the dataset.csv contract, in the contract's order, then the review-only state
+    table = pd.DataFrame(review.contract_rows(ds, shown), columns=csvio.COLUMNS)
+    table["review status"] = [r.status for r in shown]
+    table["answer status"] = [r.answer_status if r.answerable else "n/a" for r in shown]
+    table["check failed"] = [r.note or "" for r in shown]
+    # text cannot wrap in a table, so each long column is as wide as its longest cell and the table scrolls sideways
+    wide = {c: st.column_config.TextColumn(width=int(min(max(table[c].str.len().max() * 7 + 24, 120), 3000)))
+            for c in ("question", "reference_answer", "required_facts_json", "evidence_json", "provenance_json",
+                      "history_json", "check failed") if len(table)}
+    wide["case_id"] = st.column_config.TextColumn(pinned=True)
+    event = st.dataframe(table, hide_index=True, on_select="rerun", selection_mode="single-row", key=f"table|{ds}",
+                         width="stretch", column_config=wide)
     chosen = [shown[i].id for i in event.selection.rows if i < len(shown)]
     sel = chosen[0] if chosen else None
     if sel != ss.get("rv_last"):
@@ -223,6 +219,12 @@ def review_page() -> None:
     x, y, z = st.columns(3)
     if x.button("Generate answers", disabled=readonly or not sent or not todo):
         start_job(MODULE, ["answer", "--yes"])
+    drafted = [r.id for r in shown if r.answerable and not r.is_translated and r.answer_status == "candidate"]
+    again = x.checkbox(f"Yes, discard the {len(drafted)} drafted (not approved) answers in the filter", key="redo_sure")
+    if x.button("Discard drafted answers to redo them", disabled=readonly or not again or not drafted):
+        n = attempt(review.clear_answers, ds, drafted)[1]
+        flash("success", f"Discarded {n} drafted answer(s). Press Generate answers to write them again.")
+        st.rerun()
     can = bool(q0) and q0.answerable and not q0.is_translated and q0.answer_status != "none"
     if y.button("Approve answer of selected", disabled=readonly or not can):
         n = attempt(review.set_answer_status, ds, [q0.id], "approved")[1]
@@ -238,11 +240,31 @@ def review_page() -> None:
     st.subheader("Step 3: translate, then freeze")
     s = settings.load()
     gaps = [] if frozen else attempt(translate.missing, ds)[1] or []
-    st.caption(f"Extra test languages: {', '.join(s.extra_langs) or 'none'}. Translations missing: {len(gaps)}.")
+    if "tr_langs" not in ss:
+        ss["tr_langs"] = ", ".join(s.extra_langs)
+    typed = st.text_input("Translate into (language codes, separated by commas, for example th, zh)", key="tr_langs",
+                          disabled=readonly, help="Any code you type is passed to the model as the target language. "
+                          "English is the baseline and is left out.")
+    st.caption(f"Languages saved for this project: {', '.join(s.extra_langs) or 'none'}. Translations missing: {len(gaps)}. "
+               "Only questions with approved answers are translated. Judged scores in a language carry a warning until "
+               "150 judge decisions are labelled by someone who reads it.")
     sent = privacy("privacy_review")
     t, f, dup = st.columns(3)
-    if t.button("Translate", disabled=readonly or not sent or not s.extra_langs):
-        start_job(MODULE, ["translate", "--yes"])
+    if t.button("Translate", disabled=readonly or not sent or not typed.strip()):
+        def save_langs():
+            settings.save(settings.Settings.model_validate({**s.model_dump(), "extra_langs": translate.parse_langs(typed)}))
+        if attempt(save_langs)[0]:
+            start_job(MODULE, ["translate", "--yes"])
+    present = sorted({r.lang for r in rows if r.is_translated})
+    if present and not frozen:
+        with st.expander("Discard translations to make them again"):
+            gone = st.multiselect("Languages to discard", present, default=present, key="discard_langs")
+            n = sum(1 for r in rows if r.is_translated and r.lang in gone)
+            sure_d = st.checkbox(f"Yes, delete {n} translated rows, including any I marked as reviewed", key="discard_sure")
+            if st.button("Discard translations", disabled=readonly or not sure_d or not gone):
+                got = attempt(review.discard_translations, ds, gone)[1]
+                flash("success", f"Discarded {got} translated row(s). Press Translate to make them again.")
+                st.rerun()
     if f.button("Freeze", disabled=readonly or not sent):
         start_job(MODULE, ["freeze", "--yes"])
     if dup.button("Duplicate as draft", disabled=not frozen):
@@ -289,6 +311,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
         ss[f"{fk}|ev"] = list(range(len(q0.gold_evidence))) if q0 else [0]
         for i, e in enumerate(q0.gold_evidence if q0 else []):
             ss[f"{fk}|ev{i}|doc"], ss[f"{fk}|ev{i}|page"], ss[f"{fk}|ev{i}|quote"] = e.doc, e.page, e.quote
+            ss[f"{fk}|ev{i}|facts"] = list(e.facts)
         ss[f"{fk}|next"] = 100
     if q0:
         if q0.previous_id and q0.previous_id in by_id:
@@ -306,7 +329,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
     st.text_area("Reference answer (English; drafted by step 2)", key=f"{fk}|refans", disabled=readonly)
     if q0 and q0.answerable:
         st.caption(f"Answer status: {q0.answer_status}")
-    st.write("Required facts")
+    st.write("Required facts (short key phrases a correct answer must contain)")
     for i in list(ss[f"{fk}|kp"]):
         c1, c2 = st.columns([8, 1])
         c1.text_area(f"Key point {i}", key=f"{fk}|kp{i}", label_visibility="collapsed", disabled=readonly)
@@ -334,6 +357,9 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
                 st.text_input("Document", key=f"{fk}|ev{i}|doc", disabled=readonly)
             st.number_input("Page", min_value=1, step=1, key=f"{fk}|ev{i}|page", disabled=readonly)
             st.text_area("Quote", key=f"{fk}|ev{i}|quote", disabled=readonly)
+            options = [f"f{k}" for k in range(1, len(ss[f"{fk}|kp"]) + 1)]
+            ss[f"{fk}|ev{i}|facts"] = [f for f in ss.get(f"{fk}|ev{i}|facts", []) if f in options]
+            st.multiselect("Supports required facts", options, key=f"{fk}|ev{i}|facts", disabled=readonly)
             if st.button("Remove evidence", key=f"{fk}|evrm{i}", disabled=readonly):
                 ss[f"{fk}|ev"].remove(i)
                 st.rerun()
@@ -366,7 +392,8 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
         previous = None if previous == "(none)" else previous
     if st.button("Save", key=f"{fk}|save", disabled=readonly):
         points = [ss[f"{fk}|kp{i}"].strip() for i in ss[f"{fk}|kp"] if ss[f"{fk}|kp{i}"].strip()]
-        evidence = [{"doc": ss[f"{fk}|ev{i}|doc"], "page": int(ss[f"{fk}|ev{i}|page"]), "quote": ss[f"{fk}|ev{i}|quote"].strip()}
+        evidence = [{"doc": ss[f"{fk}|ev{i}|doc"], "page": int(ss[f"{fk}|ev{i}|page"]), "quote": ss[f"{fk}|ev{i}|quote"].strip(),
+                     "facts": [f for f in ss.get(f"{fk}|ev{i}|facts", []) if int(f[1:]) <= len(points)]}
                     for i in ss[f"{fk}|ev"] if ss[f"{fk}|ev{i}|quote"].strip()]
         answerable = qtype != "unanswerable"
         base = q0.model_dump() if q0 else {"id": "new", "base_id": "new", "subject": subject, "lang": lang, "source_lang": lang}

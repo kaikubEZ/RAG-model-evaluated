@@ -12,11 +12,11 @@ Evidence quotes:
 $quotes
 
 Definitions:
-- Required fact: One statement that can be judged true or false on its own. "TCP is connection-oriented" is one; "TCP is connection-oriented and reliable" is two.
+- Required fact: a short key phrase (one to six words) that a correct answer must contain, such as "all-uppercase letters" or "underscore between words". A grader will look for it in answers that are worded differently every time, so keep only the essential term or value, never a full sentence.
 
 Rules:
-- "required_facts" has one to four required facts. Together they are everything a correct answer must say, and nothing the quotes do not support.
+- "required_facts" has one to four required facts. Together they cover everything a correct answer must say, and nothing the quotes do not support. Each fact lists in "quotes" the numbers of the quotes that contain it.
 - "reference_answer" is a short answer in plain sentences that states all the required facts.
 
 Return JSON only, in exactly this shape:
-{"reference_answer": "...", "required_facts": ["fact"]}
+{"reference_answer": "...", "required_facts": [{"text": "key phrase", "quotes": [1]}]}

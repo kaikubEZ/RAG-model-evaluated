@@ -8,6 +8,8 @@ Rules:
 - If "question" and "resolved_question" are identical in the input, they must be identical in the output.
 - A key point is one statement that can be judged true or false on its own; do not merge or split key points.
 - Keep each item's "id" unchanged.
+- Every output string must be written in the target language. Never copy the English question or answer. Only code, identifiers, formulas and proper names may stay as they are.
+$reminder
 
 Items:
 $items

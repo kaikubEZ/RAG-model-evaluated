@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from . import translate
 from .. import csvio, jobs, llm, settings, store
-from ..schema import SCENARIOS, Question
+from ..schema import SCENARIOS, Page, Question
 from ..settings import Settings
 
 
@@ -67,7 +67,7 @@ def run(dataset_id: str) -> dict:
         from .. import judge
         build = store.read_json(d / "build.json")
         flags = build.setdefault("closed_book", {})
-        todo = [q for q in chosen if q.answerable and not q.is_translated and q.id not in flags]
+        todo = [q for q in chosen if q.answerable and not q.is_translated and q.id not in flags] if s.judge_checks else []
         job.step("closed-book check", len(todo))
         for q in todo:
             answer = llm.call("gen", "Answer the question below from your general knowledge, in a few sentences. "
@@ -98,6 +98,7 @@ def run(dataset_id: str) -> dict:
             "languages": list(dict.fromkeys(q.lang for q in final)),
             "bulk_approved": build.get("bulk_approved", 0),
             "scenario_overrides": build.get("scenario_overrides", 0),
+            "closed_book_checked": s.judge_checks,
             "closed_book_unchecked": sum(q.id in build.get("closed_book_unchecked", []) for q in chosen),
             "translations": len(translated),
             "translations_reviewed": sum(q.translation_reviewed for q in translated),
@@ -108,8 +109,9 @@ def run(dataset_id: str) -> dict:
         corpus = store.sha256(pages) if pages.exists() else ""
         hashes = {q_e.doc: store.sha256(store.material_dir() / q_e.doc) if (store.material_dir() / q_e.doc).exists() else None
                   for q in final for q_e in q.gold_evidence}
+        pages_map = {(p.doc, p.page): p.text for p in store.read_jsonl(pages, Page)}
         csvio.write(d / "dataset.csv", [csvio.to_row(q, by_id, scope=s.scope, corpus_version=corpus, source_hashes=hashes,
-                                                      generator_model=llm.model_name("gen")) for q in final])
+                                                      generator_model=llm.model_name("gen"), pages=pages_map) for q in final])
         manifest["corpus_version"], manifest["csv_sha256"] = corpus, store.sha256(d / "dataset.csv")
         store.write_json(d / "manifest.json", manifest)
         store.write_text_atomic(d / "questions.jsonl", body)
