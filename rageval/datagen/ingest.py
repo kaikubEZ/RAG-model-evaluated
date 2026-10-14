@@ -1,4 +1,6 @@
 """Text per page from material/<subject>/* (architecture 3.2)."""
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -8,12 +10,26 @@ from .. import settings, store, text
 from ..schema import Page
 
 
+def _cache_file(path: Path) -> Path:
+    """Where the text of this exact file (name, size, modification time) is kept between runs."""
+    st = path.stat()
+    key = hashlib.sha256(f"{path.resolve()}|{st.st_size}|{st.st_mtime_ns}".encode()).hexdigest()[:24]
+    return store.ROOT / ".cache" / "pdf-text" / f"{key}.json"
+
+
 def _extract(path: Path) -> list[str]:
     if path.suffix.lower() == ".pdf":
+        cache = _cache_file(path)
         try:
-            return [p.extract_text() or "" for p in PdfReader(path).pages]
+            return json.loads(cache.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+        try:
+            texts = [p.extract_text() or "" for p in PdfReader(path).pages]  # slow: about 1 to 2 s per file
         except Exception as e:  # pypdf raises many kinds of errors for damaged files
             raise SystemExit(f"{path.name} could not be read as a PDF ({e}). Replace the file or remove it from material/.")
+        store.write_text_atomic(cache, json.dumps(texts, ensure_ascii=False))
+        return texts
     return text.pseudo_pages(path.read_text(encoding="utf-8-sig", errors="replace"))
 
 

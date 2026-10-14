@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from rageval import jobs, llm, settings, store
-from rageval.datagen import freeze, material, review, translate
+from rageval.datagen import answer, freeze, material, review, translate
 from rageval.schema import QUESTION_TYPES, SCENARIOS, Question
 from rageval.ui import (STOP_NOTE, attempt, env_form, flash, job_status, privacy, purge, run_app, ss, start_job,
                         test)
@@ -15,6 +15,7 @@ ENV_KEYS = [("GEN_AI_API_KEY", True), ("GEN_AI_URL", False), ("GEN_AI_MODEL", Fa
             ("JUDGE_AI_API_KEY", True), ("JUDGE_AI_URL", False), ("JUDGE_AI_MODEL", False)]
 COMMON_LANGS = ["en", "th", "zh", "ja", "ko", "es", "fr", "de", "vi", "id", "pt", "ru", "ar", "hi", "it", "ms", "tr"]
 SCOPES = ["current", "published"]
+NEW_DATASET = "New dataset"
 
 
 def setup_page() -> None:
@@ -74,13 +75,15 @@ def generate_page() -> None:
     s = settings.load()
     langs = sorted(set(COMMON_LANGS) | set(s.extra_langs))
     with st.form("generate_settings"):
+        st.caption("Step 1 writes English questions with their evidence. Step 2 (answers) and step 3 (translation) "
+                   "start from the Review page once you have approved questions.")
         st.write("Questions per subject, per type (0 switches a type off)")
         per_type = {t: st.number_input(t, min_value=0, value=s.questions_per_subject.get(t, 0), step=1) for t in QUESTION_TYPES}
         st.write("Follow-ups per subject, per scenario")
         per_sc = {sc: st.number_input(sc, min_value=0, value=s.follow_ups_per_subject.get(sc, 0), step=1) for sc in SCENARIOS}
         over = st.number_input("Over-generation factor", min_value=1.0, max_value=5.0, value=float(s.overgenerate), step=0.1)
         guidance = st.text_area("Generation guidance (optional)", value=s.generation_guidance)
-        picked = st.multiselect("Extra test languages", langs, default=s.extra_langs)
+        picked = st.multiselect("Translate into (step 3, after the English answers are approved)", langs, default=s.extra_langs)
         other = st.text_input("Other language codes, separated by commas (ISO 639-1, for example sv, pl)")
         biggest = st.number_input("Largest document for the generator, in tokens", min_value=1000, value=s.gen_max_input_tokens, step=1000)
         saved = st.form_submit_button("Save settings")
@@ -116,18 +119,35 @@ def generate_page() -> None:
     for lang in s.extra_langs:
         st.warning(f"{lang}: every question is also translated to {lang}. Its judged scores carry a warning until 150 "
                    f"judge decisions are labelled by someone who reads {lang}.")
-    d = store.newest_unfrozen()
-    running = bool(d) and jobs.is_running(store.datasets_dir() / d)
-    if d:
-        st.caption(f"Starting continues the unfinished dataset {d}.")
+    drafts = [i for i in store.list_ids(store.datasets_dir())[::-1] if not store.is_frozen(i)]
+    if "goto_gen" in ss:
+        ss["gen_ds"] = ss.pop("goto_gen")
+    if ss.get("gen_ds") not in (NEW_DATASET, *drafts):
+        ss["gen_ds"] = drafts[0] if drafts else NEW_DATASET
+
+    def describe(i: str) -> str:
+        if i == NEW_DATASET:
+            return NEW_DATASET
+        n = len(store.read_jsonl(store.datasets_dir() / i / "candidates.jsonl", Question))
+        return f"{i}  ({n} questions so far)"
+
+    choice = st.selectbox("Dataset to generate into", [NEW_DATASET, *drafts], key="gen_ds", format_func=describe,
+                          help="Pick an unfinished dataset to continue it (up to the targets above), or start a new one.")
+    name = st.text_input("Name for the new dataset (optional)", key="gen_name") if choice == NEW_DATASET else ""
+    d = None if choice == NEW_DATASET else store.datasets_dir() / choice
+    running = bool(d) and jobs.is_running(d)
     sent = privacy("privacy_generate")
     has_files = any(sub["files"] for sub in subjects)
     if running:
         st.info("Generation is running.")
-    if st.button("Start generating", disabled=running or not sent or not has_files):
-        start_job(MODULE, ["generate", "--yes"])
+    if st.button("Start generating English questions", disabled=running or not sent or not has_files):
+        ds = choice if d else store.new_id(name.strip())
+        (store.datasets_dir() / ds).mkdir(parents=True, exist_ok=True)
+        ss["goto_gen"] = ss["goto_dataset"] = ds  # the page and the Review page follow the dataset just started
+        start_job(MODULE, ["generate", "--yes", "--dataset", ds])
     st.caption(STOP_NOTE)
-    job_status("@dataset")
+    if d:
+        job_status(str(d))
 
 
 # ---------------------------------------------------------------- Review
@@ -162,7 +182,7 @@ def review_page() -> None:
     shown = [r for r in rows if all(p == "all" or str(getattr(r, f) or "") == p for p, f in zip(pick, fields))]
     event = st.dataframe(
         pd.DataFrame([{"id": r.id, "subject": r.subject, "type": r.question_type, "scenario": r.scenario or "",
-                       "lang": r.lang, "status": r.status, "check failed": bool(r.note), "question": r.question[:120]}
+                       "lang": r.lang, "status": r.status, "answer": r.answer_status if r.answerable else "n/a", "check failed": bool(r.note), "question": r.question[:120]}
                       for r in shown]),
         hide_index=True, on_select="rerun", selection_mode="single-row", key=f"table|{ds}", width="stretch")
     chosen = [shown[i].id for i in event.selection.rows if i < len(shown)]
@@ -195,7 +215,27 @@ def review_page() -> None:
         flash("success", f"Approved {n} row(s) in bulk. This count is recorded in the manifest.")
         st.rerun()
 
-    st.subheader("Translate and freeze")
+    st.subheader("Step 2: English answers")
+    todo = [r for r in rows if answer.todo([r])] if not frozen else []
+    st.caption(f"Approved questions waiting for an answer: {len(todo)}. Drafted answers are checked against the quotes; "
+               "open a row to read, edit and approve its answer.")
+    sent = privacy("privacy_answer")
+    x, y, z = st.columns(3)
+    if x.button("Generate answers", disabled=readonly or not sent or not todo):
+        start_job(MODULE, ["answer", "--yes"])
+    can = bool(q0) and q0.answerable and not q0.is_translated and q0.answer_status != "none"
+    if y.button("Approve answer of selected", disabled=readonly or not can):
+        n = attempt(review.set_answer_status, ds, [q0.id], "approved")[1]
+        flash("success" if n else "warning", "Answer approved." if n else "Not approved: it has a failed check or is already approved.")
+        st.rerun()
+    ready = [r.id for r in shown if r.answerable and not r.is_translated and r.answer_status == "candidate" and not r.note]
+    sure_a = z.checkbox(f"Yes, approve {len(ready)} answers in the filter that have no failed check", key="bulk_ans_sure")
+    if z.button("Bulk approve answers", disabled=readonly or not sure_a or not ready):
+        n = attempt(review.set_answer_status, ds, ready, "approved")[1]
+        flash("success", f"Approved {n} answer(s).")
+        st.rerun()
+
+    st.subheader("Step 3: translate, then freeze")
     s = settings.load()
     gaps = [] if frozen else attempt(translate.missing, ds)[1] or []
     st.caption(f"Extra test languages: {', '.join(s.extra_langs) or 'none'}. Translations missing: {len(gaps)}.")
@@ -242,6 +282,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
         ss[f"{fk}|init"] = True
         ss[f"{fk}|question"] = q0.question if q0 else ""
         ss[f"{fk}|resolved"] = q0.resolved_question if q0 else ""
+        ss[f"{fk}|refans"] = (q0.reference_answer or "") if q0 else ""
         ss[f"{fk}|kp"] = list(range(len(q0.gold_ans))) if q0 else [0]
         for i, p in enumerate(q0.gold_ans if q0 else [""]):
             ss[f"{fk}|kp{i}"] = p
@@ -252,8 +293,9 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
     if q0:
         if q0.previous_id and q0.previous_id in by_id:
             st.info(f"First-turn question: {by_id[q0.previous_id].question}")
-        if q0.is_translated and q0.base_id in by_id:
-            st.info(f"Source question ({by_id[q0.base_id].lang}): {by_id[q0.base_id].question}")
+        source = by_id.get(f"{q0.base_id}-{q0.source_lang}")
+        if q0.is_translated and source:
+            st.info(f"Source question ({source.lang}): {source.question}")
         if q0.closest_passage:
             st.caption(f"Closest passage the judge found: {q0.closest_passage}")
         if q0.note:
@@ -261,7 +303,10 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
     question = st.text_area("Question", key=f"{fk}|question", disabled=readonly)
     resolved = st.text_area("Resolved question (the same question made self-contained)", key=f"{fk}|resolved", disabled=readonly)
 
-    st.write("Gold key points")
+    st.text_area("Reference answer (English; drafted by step 2)", key=f"{fk}|refans", disabled=readonly)
+    if q0 and q0.answerable:
+        st.caption(f"Answer status: {q0.answer_status}")
+    st.write("Required facts")
     for i in list(ss[f"{fk}|kp"]):
         c1, c2 = st.columns([8, 1])
         c1.text_area(f"Key point {i}", key=f"{fk}|kp{i}", label_visibility="collapsed", disabled=readonly)
@@ -329,6 +374,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
             **base, "question": question.strip(), "resolved_question": resolved.strip() or question.strip(),
             "previous_id": previous, "scenario": None if scenario == scenarios[0] else scenario, "question_type": qtype,
             "answerable": answerable, "gold_ans": points if answerable else [], "gold_evidence": evidence if answerable else [],
+            "reference_answer": ss[f"{fk}|refans"].strip() or None if answerable else None,
             "status": status})
         if ok:
             ok, reason = attempt(review.save_row, ds, q)

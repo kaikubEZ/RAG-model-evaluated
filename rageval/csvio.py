@@ -37,7 +37,7 @@ def to_row(q: Question, by_id: dict[str, Question], *, scope: str, corpus_versio
         "case_id": q.id, "course_id": q.subject, "scope": scope, "question": q.question,
         "history_json": _j(history), "corpus_version": corpus_version,
         "answerability": "answerable" if q.answerable else "unanswerable",
-        "reference_answer": "\n".join(q.gold_ans) if q.answerable else NO_ANSWER,
+        "reference_answer": (q.reference_answer or "\n".join(q.gold_ans)) if q.answerable else NO_ANSWER,
         "required_facts_json": _j([{"fact_id": f"f{i}", "text": t} for i, t in enumerate(q.gold_ans, 1)]),
         "evidence_json": _j(evidence),
         "retrieval_qrels_json": "", "relevance_coverage": "", "answer_rubric_json": "",
@@ -100,6 +100,7 @@ def _question(r: dict[str, str]) -> Question:
         question_type=prov.get("question_type") or next((t for t in tags if t in QUESTION_TYPES), None)
         or ("fact" if answerable else "unanswerable"),
         difficulty=prov.get("difficulty"), answerable=answerable,
+        reference_answer=(r.get("reference_answer") or None) if answerable else None, answer_status="approved" if answerable else "none",
         gold_ans=[f["text"] for f in facts], gold_evidence=evidence,
         closed_book=bool(prov.get("closed_book")), translation_reviewed=bool(prov.get("translation_reviewed")),
         status="approved")

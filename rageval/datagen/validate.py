@@ -14,6 +14,13 @@ class _Answerable(BaseModel):
     quotes_used: list[bool] = []
 
 
+class _QuestionCheck(BaseModel):
+    question_standalone: bool
+    resolved_standalone: bool
+    answerable: bool
+    quotes_used: list[bool] = []
+
+
 class _Unanswerable(BaseModel):
     standalone: bool
     answer_found: bool
@@ -37,8 +44,8 @@ def _structure(q: Question, others: list[Question], strict_scenario: bool) -> st
     if q.answerable != (q.question_type != "unanswerable"):
         return "answerable does not match the question type"
     if q.answerable:
-        if not 1 <= len(q.gold_ans) <= 4:
-            return "an answerable question needs one to four key points"
+        if q.answer_status != "none" and not 1 <= len(q.gold_ans) <= 4:
+            return "an answer needs one to four required facts"
         if not q.gold_evidence:
             return "an answerable question needs at least one evidence quote"
     elif q.gold_ans or q.gold_evidence or q.is_follow_up:
@@ -112,6 +119,15 @@ def judge_checks(q: Question, pages_by_doc: dict[str, list[Page]]) -> tuple[Ques
                 return None, "standalone"
             passage = passage or r.closest_passage
         return q.model_copy(update={"closest_passage": passage or None}), None
+    if not q.gold_ans:  # stage 1: the question alone, against its quotes
+        c = llm.ask("judge", llm.render("question_check", question=q.question, resolved_question=q.resolved_question,
+                                        quotes=_numbered("Quote", [e.quote for e in q.gold_evidence])), _QuestionCheck)
+        if not c.resolved_standalone or c.question_standalone != (q.scenario != "same"):
+            return None, "standalone"
+        if not c.answerable:
+            return None, "answerable"
+        used = [e for e, u in zip(q.gold_evidence, c.quotes_used) if u] if len(c.quotes_used) == len(q.gold_evidence) else []
+        return q.model_copy(update={"gold_evidence": used or q.gold_evidence}), None
     r = llm.ask("judge", llm.render(
         "answerable", question=q.question, resolved_question=q.resolved_question,
         key_points=_numbered("Key point", q.gold_ans), quotes=_numbered("Quote", [e.quote for e in q.gold_evidence])),
@@ -122,3 +138,17 @@ def judge_checks(q: Question, pages_by_doc: dict[str, list[Page]]) -> tuple[Ques
         return None, "answerable"
     used = [e for e, u in zip(q.gold_evidence, r.quotes_used) if u] if len(r.quotes_used) == len(q.gold_evidence) else []
     return q.model_copy(update={"gold_evidence": used or q.gold_evidence}), None
+
+
+def answer_supported(q: Question) -> str | None:
+    """Stage 2 check: do the quotes alone support every required fact, and is the question still standalone?
+
+    None on pass, else the reason. May raise llm.BadReply.
+    """
+    r = llm.ask("judge", llm.render(
+        "answerable", question=q.question, resolved_question=q.resolved_question,
+        key_points=_numbered("Key point", q.gold_ans), quotes=_numbered("Quote", [e.quote for e in q.gold_evidence])),
+        _Answerable)
+    if len(r.key_points_covered) != len(q.gold_ans) or not all(r.key_points_covered):
+        return "answer: the quotes do not support every required fact"
+    return None

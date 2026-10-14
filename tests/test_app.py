@@ -40,10 +40,10 @@ def quote(page):
 
 
 def question(n, page, **kw):
-    qid = f"law-{n:04d}"
-    fields = dict(id=qid, base_id=qid, subject="law", lang="en", source_lang="en", question=f"What is {words(100 + n, 4)}?",
+    qid = f"law-{n:03d}"
+    fields = dict(id=f"{qid}-en", base_id=qid, subject="law", lang="en", source_lang="en", question=f"What is {words(100 + n, 4)}?",
                   resolved_question=f"What is {words(100 + n, 4)}?", question_type="fact", answerable=True,
-                  gold_ans=[words(200 + n, 5)], gold_evidence=[Evidence(doc="law/a.txt", page=page, quote=quote(page))],
+                  gold_ans=[words(200 + n, 5)], reference_answer=words(300 + n, 6), answer_status="approved", gold_evidence=[Evidence(doc="law/a.txt", page=page, quote=quote(page))],
                   status="candidate")
     fields.update(kw)
     if "resolved_question" not in kw:
@@ -164,48 +164,48 @@ def test_new_row_gets_a_fresh_id(root):
     new = question(9, 3, id="new", base_id="new")
     assert review.save_row(ds, new) is None
     ids = [r.id for r in review.load(ds)]
-    assert ids == ["law-0001", "law-0002", "law-0003"]
-    assert review.load(ds)[2].base_id == "law-0003"
+    assert ids == ["law-001-en", "law-002-en", "law-003-en"]
+    assert review.load(ds)[2].base_id == "law-003"
     review.save_row(ds, question(8, 2, id="new", base_id="new"))
-    assert review.load(ds)[3].id == "law-0004"
+    assert review.load(ds)[3].id == "law-004-en"
 
 
 def test_editing_an_approved_source_question_removes_its_variants(root):
     ds = make_dataset(rows=[question(1, 1, status="approved"), question(2, 2, status="approved"),
-                            question(1, 1, id="law-0001.th", lang="th", status="approved"),
-                            question(2, 2, id="law-0002.th", lang="th", status="approved", base_id="law-0002")])
+                            question(1, 1, id="law-001-th", lang="th", status="approved"),
+                            question(2, 2, id="law-002-th", lang="th", status="approved", base_id="law-002")])
     rows = review.load(ds)
-    rows[2] = rows[2].model_copy(update={"base_id": "law-0001"})
+    rows[2] = rows[2].model_copy(update={"base_id": "law-001"})
     store.write_jsonl(store.datasets_dir() / ds / "candidates.jsonl", rows)
     first = review.load(ds)[0]
     review.save_row(ds, first.model_copy(update={"gold_ans": ["changed key point"]}))
-    assert [r.id for r in review.load(ds)] == ["law-0001", "law-0002", "law-0002.th"]
+    assert [r.id for r in review.load(ds)] == ["law-001-en", "law-002-en", "law-002-th"]
     review.save_row(ds, review.load(ds)[0].model_copy(update={"difficulty": "hard"}))  # not a content change
     assert len(review.load(ds)) == 3
 
 
 def test_editing_a_variant_rewrites_only_the_variant_and_review_is_marked(root):
     ds = make_dataset(rows=[question(1, 1, status="approved"),
-                            question(1, 1, id="law-0001.th", lang="th", status="approved", base_id="law-0001")])
+                            question(1, 1, id="law-001-th", lang="th", status="approved", base_id="law-001")])
     variant = review.load(ds)[1]
     review.save_row(ds, variant.model_copy(update={"question": "ใหม่?", "resolved_question": "ใหม่?"}))
     rows = review.load(ds)
     assert (rows[0].status, rows[1].question, rows[1].difficulty) == ("approved", "ใหม่?", None)
-    review.mark_reviewed(ds, "law-0001.th")
+    review.mark_reviewed(ds, "law-001-th")
     assert review.load(ds)[1].translation_reviewed
     with pytest.raises(ValueError):
-        review.mark_reviewed(ds, "law-0001")
+        review.mark_reviewed(ds, "law-001-en")
 
 
 def test_scenario_override_is_counted_once_per_row(root):
     ds = make_dataset(rows=[question(1, 1, status="approved"),
                             question(2, 2, question="and then?", resolved_question="What follows? Tell me.",
-                                     previous_id="law-0001", scenario="same")])
+                                     previous_id="law-001-en", scenario="same")])
     follow = review.load(ds)[1]  # "same" but sharing no page with the first turn: disagrees with the page rule
     assert review.save_row(ds, follow) is None
     review.save_row(ds, review.load(ds)[1])
     assert store.read_json(store.datasets_dir() / ds / "build.json")["scenario_overrides"] == 1
-    other = question(3, 3, id="law-0003", question="and also?", resolved_question="What else? Tell me.", previous_id="law-0001", scenario="same")
+    other = question(3, 3, id="law-003-en", question="and also?", resolved_question="What else? Tell me.", previous_id="law-001-en", scenario="same")
     review.save_row(ds, other.model_copy(update={"id": "x"}))
     build = store.read_json(store.datasets_dir() / ds / "build.json")
     assert build["scenario_overrides"] == 2 and len(build["scenario_override_ids"]) == 2
@@ -213,17 +213,17 @@ def test_scenario_override_is_counted_once_per_row(root):
 
 def test_bulk_approve_is_counted_and_failed_rows_are_skipped(root):
     ds = make_dataset(rows=[question(1, 1), question(2, 2), question(3, 3, note="structure: broken")])
-    assert review.set_status(ds, ["law-0001", "law-0002", "law-0003"], "approved", bulk=True) == 2
-    assert review.set_status(ds, ["law-0001"], "approved", bulk=True) == 0
-    assert review.set_status(ds, ["law-0003"], "approved") == 0
+    assert review.set_status(ds, ["law-001-en", "law-002-en", "law-003-en"], "approved", bulk=True) == 2
+    assert review.set_status(ds, ["law-001-en"], "approved", bulk=True) == 0
+    assert review.set_status(ds, ["law-003-en"], "approved") == 0
     assert store.read_json(store.datasets_dir() / ds / "build.json")["bulk_approved"] == 2
     assert review.summary(ds)["bulk_approved"] == 2
 
 
 def test_rejecting_a_source_rejects_its_variants(root):
     ds = make_dataset(rows=[question(1, 1, status="approved"), question(2, 2, status="approved"),
-                            question(1, 1, id="law-0001.th", lang="th", status="approved", base_id="law-0001")])
-    assert review.set_status(ds, ["law-0001"], "rejected") == 2
+                            question(1, 1, id="law-001-th", lang="th", status="approved", base_id="law-001")])
+    assert review.set_status(ds, ["law-001-en"], "rejected") == 2
     assert [r.status for r in review.load(ds)] == ["rejected", "approved", "rejected"]
 
 
@@ -241,7 +241,7 @@ def test_saving_is_refused_while_a_job_runs_and_when_frozen(root):
     with pytest.raises(ValueError, match="frozen"):
         review.save_row(frozen, review.load(frozen)[0])
     with pytest.raises(ValueError, match="frozen"):
-        review.set_status(frozen, ["law-0001"], "rejected")
+        review.set_status(frozen, ["law-001-en"], "rejected")
     assert len(review.load(frozen)) == 2
 
 
@@ -306,7 +306,7 @@ def test_review_form_opens_for_a_new_question_and_saves_it(root):
     next(b for b in at.button if b.key == f"{fk}|save").click().run()
     assert not at.exception, [e.value for e in at.exception]
     rows = review.load("20260101-000000")
-    assert [r.id for r in rows][-1] == "law-0003" and rows[-1].question == "What is new?" and rows[-1].note is None
+    assert [r.id for r in rows][-1] == "law-003-en" and rows[-1].question == "What is new?" and rows[-1].note is None
 
 
 def test_results_show_the_scored_run_and_compare_refuses_other_datasets(root):
@@ -348,3 +348,17 @@ def test_generate_saves_settings_with_extra_language_codes(root):
     next(w for w in at.text_input if w.label.startswith("Other language codes")).input("swedish")
     next(b for b in at.button if b.label == "Save settings").click().run()
     assert "Not a language code" in at.error[0].value and settings.load().extra_langs == ["th", "sv", "pl"]
+
+
+def test_generate_page_lists_new_dataset_and_old_drafts(root):
+    state(root, "draft")
+    make_dataset(ds="20260103-000000")
+    make_dataset(frozen=True, ds="20260104-000000")
+    at = page("Generate")
+    assert not at.exception, [e.value for e in at.exception]
+    box = next(b for b in at.selectbox if b.label == "Dataset to generate into")
+    assert box.options[0] == "New dataset" and len(box.options) == 3  # the frozen dataset is not offered
+    assert box.value == "20260103-000000"  # the newest unfinished draft is the default
+    assert "2 questions so far" in box.format_func(box.value)
+    box.select("New dataset").run()
+    assert any(w.label.startswith("Name for the new dataset") for w in at.text_input)

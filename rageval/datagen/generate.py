@@ -1,6 +1,5 @@
-"""`rageval generate`: ingest, generate, validate, refill, follow-ups (architecture 3.3 and 3.4)."""
+"""`rageval-datagen generate`, stage 1: English questions with their evidence, validated (architecture 3.3 and 3.4). Answers come later."""
 import hashlib
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from ..schema import QUESTION_TYPES, SCENARIOS, Evidence, Page, Question
 
 SINGLE_ROUNDS = 3  # the first round and up to two refills
 FOLLOW_ROUNDS = 2  # the first round and one refill
+BASE_LANG = "en"  # the baseline set is English; other languages come from the translate stage
 
 
 class _Quote(BaseModel):
@@ -26,12 +26,11 @@ class _Item(BaseModel):
     question_type: str | None = None
     scenario: str | None = None
     previous_id: str | None = None
-    gold_ans: list[str] = []
     gold_evidence: list[_Quote] = []
 
 
 class _Reply(BaseModel):
-    language: str
+    language: str = "en"  # ignored: every baseline question is English
     items: list[dict]  # validated one by one, so a single malformed item does not discard the batch
 
 
@@ -86,12 +85,6 @@ def _drop(st: _State, check: str, label: str) -> None:
     st.drops.append((check, label))
 
 
-def _language(raw: str) -> str | None:
-    """A two-letter ISO 639-1 code from replies like "en", "EN", "en-US"; None for anything else."""
-    code = re.split(r"[-_]", raw.strip().lower())[0]
-    return code if re.fullmatch(r"[a-z]{2}", code) else None
-
-
 def _items(st: _State, reply: _Reply, label: str, limit: int | None = None) -> list[_Item]:
     """The reply's items that are well formed; each malformed one is a bad_reply drop."""
     out = []
@@ -105,7 +98,7 @@ def _items(st: _State, reply: _Reply, label: str, limit: int | None = None) -> l
 
 def _new_id(st: _State, subject: str) -> str:
     n = st.build["next_id"][subject] = st.build["next_id"].get(subject, 0) + 1
-    return f"{subject}-{n:04d}"
+    return f"{subject}-{n:03d}"
 
 
 def _commit(st: _State, key: str, survivors: list[Question]) -> None:
@@ -175,11 +168,6 @@ def _batch_single(st: _State, key: str, subject: str, qtype: str, doc: str, n: i
     except llm.BadReply:
         _drop(st, "bad_reply", qtype)
         return _commit(st, key, [])
-    lang = st.build["langs"].get(doc) or _language(reply.language)
-    if not lang:
-        _drop(st, "bad_reply", qtype)
-        return _commit(st, key, [])
-    st.build["langs"][doc] = lang
     pool = [q for q in st.cands if q.subject == subject]
     kept: list[Question] = []
     for item in _items(st, reply, qtype, n):
@@ -190,10 +178,9 @@ def _batch_single(st: _State, key: str, subject: str, qtype: str, doc: str, n: i
                 continue
             rng = ranges[item.slot - 1]
         answerable = qtype != "unanswerable"
-        qid = _new_id(st, subject)
-        q = Question(id=qid, base_id=qid, subject=subject, lang=lang, source_lang=lang, question=item.question,
-                     resolved_question=item.question, question_type=qtype, answerable=answerable,
-                     gold_ans=item.gold_ans if answerable else [],
+        base = _new_id(st, subject)
+        q = Question(id=f"{base}-{BASE_LANG}", base_id=base, subject=subject, lang=BASE_LANG, source_lang=BASE_LANG,
+                     question=item.question, resolved_question=item.question, question_type=qtype, answerable=answerable,
                      gold_evidence=[Evidence(doc=doc, **e.model_dump()) for e in item.gold_evidence] if answerable else [])
         if out := _vet(st, q, pool, qtype, rng):
             kept.append(out)
@@ -214,11 +201,6 @@ def _batch_follow(st: _State, key: str, subject: str, doc: str, counts: dict[str
     except llm.BadReply:
         _drop(st, "bad_reply", "follow_up")
         return _commit(st, key, [])
-    lang = st.build["langs"].get(doc) or _language(reply.language)
-    if not lang:
-        _drop(st, "bad_reply", "follow_up")
-        return _commit(st, key, [])
-    st.build["langs"][doc] = lang
     pool = [q for q in st.cands if q.subject == subject]
     taken = dict.fromkeys(counts, 0)
     kept: list[Question] = []
@@ -226,12 +208,12 @@ def _batch_follow(st: _State, key: str, subject: str, doc: str, counts: dict[str
         if item.scenario not in taken or taken[item.scenario] >= counts[item.scenario]:
             continue
         taken[item.scenario] += 1
-        qid = _new_id(st, subject)
+        base = _new_id(st, subject)
         try:
-            q = Question(id=qid, base_id=qid, subject=subject, lang=lang, source_lang=lang, question=item.question,
-                         resolved_question=item.resolved_question or item.question, previous_id=item.previous_id,
-                         scenario=item.scenario, question_type=item.question_type, answerable=True,
-                         gold_ans=item.gold_ans, gold_evidence=[Evidence(doc=doc, **e.model_dump()) for e in item.gold_evidence])
+            q = Question(id=f"{base}-{BASE_LANG}", base_id=base, subject=subject, lang=BASE_LANG, source_lang=BASE_LANG,
+                         question=item.question, resolved_question=item.resolved_question or item.question,
+                         previous_id=item.previous_id, scenario=item.scenario, question_type=item.question_type,
+                         answerable=True, gold_evidence=[Evidence(doc=doc, **e.model_dump()) for e in item.gold_evidence])
         except ValidationError:
             _drop(st, "structure", item.scenario)
             continue

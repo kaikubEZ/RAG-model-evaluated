@@ -28,15 +28,15 @@ def _writable(dataset_id: str) -> Path:
     return d
 
 
-def _fresh_id(build: dict, rows: list[Question], subject: str) -> str:
-    taken = {r.id for r in rows}
+def _fresh_base_id(build: dict, rows: list[Question], subject: str) -> str:
+    taken = {r.base_id for r in rows}
     n = build.setdefault("next_id", {}).get(subject, 0)
     while True:
         n += 1
-        if f"{subject}-{n:04d}" not in taken:
+        if f"{subject}-{n:03d}" not in taken:
             break
     build["next_id"][subject] = n
-    return f"{subject}-{n:04d}"
+    return f"{subject}-{n:03d}"
 
 
 def save_row(dataset_id: str, q: Question) -> str | None:
@@ -46,13 +46,17 @@ def save_row(dataset_id: str, q: Question) -> str | None:
     build = store.read_json(d / "build.json")
     old = next((r for r in rows if r.id == q.id), None)
     if old is None:
-        new_id = _fresh_id(build, rows, q.subject)
-        q = q.model_copy(update={"id": new_id, "base_id": new_id})
+        base = _fresh_base_id(build, rows, q.subject)
+        q = q.model_copy(update={"id": f"{base}-{q.lang}", "base_id": base})
     others = [r for r in rows if r.subject == q.subject and r.id != q.id]
     reason = validate.check_row(q, pages(dataset_id), others, strict_scenario=False)
     update: dict = {"note": reason, "status": "candidate" if reason else q.status}
     if not q.is_translated:
         update["difficulty"] = validate.difficulty(q) if q.answerable else None
+    answered = (old.reference_answer, old.gold_ans) if old else (None, [])
+    if q.answerable and (q.gold_ans or q.reference_answer):
+        if q.answer_status == "none" or (q.answer_status == "approved" and answered != (q.reference_answer, q.gold_ans)):
+            update["answer_status"] = "candidate"  # an edited answer has to be approved again
     q = q.model_copy(update=update)
     first = next((r for r in others if r.id == q.previous_id), None)
     if first is not None and not validate.scenario_ok(q, first):
@@ -65,7 +69,8 @@ def save_row(dataset_id: str, q: Question) -> str | None:
     else:
         rows = [q if r.id == q.id else r for r in rows]
         if (old.status == "approved" and not old.is_translated
-                and (old.question, old.resolved_question, old.gold_ans) != (q.question, q.resolved_question, q.gold_ans)):
+                and (old.question, old.resolved_question, old.reference_answer, old.gold_ans)
+                != (q.question, q.resolved_question, q.reference_answer, q.gold_ans)):
             rows = translate.drop_variants(rows, q.base_id)
     store.write_jsonl(d / "candidates.jsonl", rows)
     store.write_json(d / "build.json", build)
@@ -78,7 +83,8 @@ def set_status(dataset_id: str, ids: list[str], status: str, bulk: bool = False)
     rows = store.read_jsonl(d / "candidates.jsonl", Question)
     wanted = set(ids)
     if status == "rejected":  # a rejected source question takes its variants with it
-        wanted |= {r.id for r in rows if r.is_translated and r.base_id in wanted}
+        bases = {r.base_id for r in rows if r.id in wanted}
+        wanted |= {r.id for r in rows if r.is_translated and r.base_id in bases}
     out, changed = [], 0
     for r in rows:
         if r.id in wanted and r.status != status and not (status == "approved" and r.note):
@@ -90,6 +96,24 @@ def set_status(dataset_id: str, ids: list[str], status: str, bulk: bool = False)
         build = store.read_json(d / "build.json")
         build["bulk_approved"] = build.get("bulk_approved", 0) + changed
         store.write_json(d / "build.json", build)
+    return changed
+
+
+def set_answer_status(dataset_id: str, ids: list[str], status: str) -> int:
+    """Approve (or send back to candidate) the answers of source questions. A failed check blocks approval."""
+    d = _writable(dataset_id)
+    rows = store.read_jsonl(d / "candidates.jsonl", Question)
+    wanted, changed, out = set(ids), 0, []
+    for r in rows:
+        ready = r.answerable and not r.is_translated and r.answer_status != "none" and not (status == "approved" and r.note)
+        if r.id in wanted and ready and r.answer_status != status:
+            r = r.model_copy(update={"answer_status": status})
+            changed += 1
+        out.append(r)
+    if status != "approved":  # translations of an answer that is no longer approved are out of date
+        gone = {r.base_id for r in out if r.id in wanted and r.answer_status != "approved"}
+        out = [r for r in out if not (r.is_translated and r.base_id in gone)]
+    store.write_jsonl(d / "candidates.jsonl", out)
     return changed
 
 
@@ -128,6 +152,7 @@ def summary(dataset_id: str) -> dict:
     return {
         "total": len(rows), "by_subject": count(lambda r: r.subject), "by_type": count(lambda r: r.question_type),
         "by_scenario": count(lambda r: r.scenario), "by_language": count(lambda r: r.lang),
-        "by_status": count(lambda r: r.status), "approved": len(approved), "targets": targets, "shortfall": shortfall,
+        "by_status": count(lambda r: r.status), "approved": len(approved),
+        "answers": count(lambda r: r.answer_status if r.answerable and not r.is_translated and r.status == "approved" else None), "targets": targets, "shortfall": shortfall,
         "bulk_approved": build.get("bulk_approved", 0), "scenario_overrides": build.get("scenario_overrides", 0),
     }

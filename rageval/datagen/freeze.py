@@ -17,7 +17,7 @@ def select(rows: list[Question], s: Settings) -> list[Question]:
     """
     chosen: set[str] = set()
     for subject in dict.fromkeys(r.subject for r in rows):
-        mine = [r for r in rows if r.subject == subject and r.status == "approved" and not r.is_translated]
+        mine = [r for r in rows if r.subject == subject and r.status == "approved" and r.answer_ready and not r.is_translated]
         by_id = {r.id: r for r in mine}
         taken = dict.fromkeys(SCENARIOS, 0)
         picked: dict[str, Question] = {}
@@ -34,7 +34,8 @@ def select(rows: list[Question], s: Settings) -> list[Question]:
                 per_type[q.question_type] = per_type.get(q.question_type, 0) + 1
                 picked[q.id] = q
         chosen |= picked.keys()
-    variants = [r for r in rows if r.is_translated and r.status == "approved" and r.base_id in chosen]
+    bases = {r.base_id for r in rows if r.id in chosen}
+    variants = [r for r in rows if r.is_translated and r.status == "approved" and r.base_id in bases]
     chosen |= {v.id for v in variants if not v.is_follow_up}
     chosen |= {v.id for v in variants if v.is_follow_up and v.previous_id in chosen}
     return [r for r in rows if r.id in chosen]
@@ -78,7 +79,7 @@ def run(dataset_id: str) -> dict:
                 build.setdefault("closed_book_unchecked", []).append(q.id)
             store.write_json(d / "build.json", build)
             job.tick(q.id)
-        final = [q.model_copy(update={"closed_book": flags.get(q.base_id, False)}) for q in chosen]
+        final = [q.model_copy(update={"closed_book": flags.get(f"{q.base_id}-{q.source_lang}", False)}) for q in chosen]
         body = "".join(q.model_dump_json() + "\n" for q in final)
         counts = _counts(final)
         targets = {**s.questions_per_subject, **s.follow_ups_per_subject}

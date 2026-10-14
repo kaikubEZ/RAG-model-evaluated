@@ -1,5 +1,12 @@
 # Dataset contract: data generation → evaluation
 
+## How the dataset is built (rageval-datagen)
+
+1. **Questions (English).** `generate` writes English questions with verbatim evidence quotes, from documents in any language. Ids are `<subject>-<nnn>-en`, for example `med-001-en`. You review and approve them.
+2. **Answers (English).** `answer` drafts a reference answer and required facts for each approved question from its quotes only, then a judge checks that the quotes support every fact. A failed check keeps the draft with a note. You edit and approve the answers.
+3. **Translation.** `translate` adds the other languages for rows whose answers are approved, with ids `med-001-th`, `med-001-fr`. All variants share `question_family_id` (`med-001`). Unanswerable questions need no answer.
+4. **Freeze.** Only questions with approved answers (and their translations) are frozen and written to `dataset.csv`.
+
 `rageval-datagen freeze` writes `datasets/<id>/dataset.csv` (UTF-8, one row per test case). `rageval-eval` reads only that file, so the two halves can run on different machines. `manifest.json` beside it records `csv_sha256`; a run refuses a CSV that no longer matches it. A CSV with no manifest (written by hand or by another tool) is accepted and hashed as is.
 
 Required to load: `case_id`, `course_id`, `scope`, `question`. Blank cell = unknown, `[]` = explicitly empty. Code: `rageval/csvio.py`.

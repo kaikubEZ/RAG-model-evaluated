@@ -45,6 +45,22 @@ def request_stop(directory: Path) -> None:
     (directory / "job.stop").touch()
 
 
+def usage(directory: Path) -> dict:
+    """Model calls and tokens used by the jobs of this directory so far: {role: {calls, prompt, completion}}."""
+    try:
+        return json.loads((directory / "usage.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def log_tail(lines: int = 200) -> str:
+    try:
+        text = (store.ROOT / "rageval-job.log").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    return chr(10).join(text.splitlines()[-lines:])
+
+
 class Job:
     """Context manager for one job in a dataset or run directory.
 
@@ -53,8 +69,11 @@ class Job:
         job.tick("file.pdf")     # raises Stopped if the user pressed Stop
     """
 
+    active: "Job | None" = None  # the job of this process; llm.call reports usage to it and stops when it is stopped
+
     def __init__(self, directory: Path, name: str):
         self.dir, self.name = directory, name
+        self._usage = usage(directory)
         self._done = self._total = 0
         self._step = ""
         self._alive = threading.Event()
@@ -68,9 +87,11 @@ class Job:
         self._alive.set()
         threading.Thread(target=self._heartbeat, daemon=True).start()
         self._write("started")
+        Job.active = self
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
+        Job.active = None
         self._alive.clear()
         if exc_type is None:
             state = "finished"
@@ -98,6 +119,13 @@ class Job:
             "job": self.name, "step": self._step, "done": self._done, "total": self._total,
             "message": message, "time": time.time(),
         })
+
+    def add_usage(self, role: str, prompt: int, completion: int) -> None:
+        u = self._usage.setdefault(role, {"calls": 0, "prompt": 0, "completion": 0})
+        u["calls"] += 1
+        u["prompt"] += prompt
+        u["completion"] += completion
+        store.write_json(self.dir / "usage.json", self._usage)
 
     def check_stop(self) -> None:
         if (self.dir / "job.stop").exists():

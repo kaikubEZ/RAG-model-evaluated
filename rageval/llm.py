@@ -2,6 +2,8 @@
 import hashlib
 import json
 import os
+import threading
+import time
 from pathlib import Path
 from string import Template
 from typing import TypeVar
@@ -9,7 +11,7 @@ from typing import TypeVar
 from dotenv import load_dotenv
 from pydantic import TypeAdapter, ValidationError
 
-from . import store
+from . import jobs, store
 
 PROMPTS = Path(__file__).parent / "prompts"
 T = TypeVar("T")
@@ -43,15 +45,56 @@ def model_name(role: str) -> str:
     return config(role)["model"]
 
 
+def _create(client, cfg: dict, prompt: str):
+    """One API request. Inside a job it runs in a side thread so that Stop can abandon it at once."""
+    def send():
+        return client.chat.completions.create(model=cfg["model"], temperature=0,
+                                              messages=[{"role": "user", "content": prompt}])
+    job = jobs.Job.active
+    if job is None:
+        return send()
+    box: dict = {}
+
+    def work():
+        try:
+            box["reply"] = send()
+        except BaseException as e:  # handed back to the caller's thread
+            box["error"] = e
+    t = threading.Thread(target=work, daemon=True)  # an abandoned request dies with the process
+    t.start()
+    while t.is_alive():
+        t.join(0.5)
+        job.check_stop()  # raises jobs.Stopped; the request is simply asked again on the next Start
+    if "error" in box:
+        raise box["error"]
+    return box["reply"]
+
+
 def call(role: str, prompt: str) -> str:
     """Send one prompt, return the reply text. Tests replace this function."""
     cfg = config(role)
     if role not in _clients:
         from openai import OpenAI
-        _clients[role] = OpenAI(api_key=cfg["api_key"], base_url=cfg["url"], max_retries=5, timeout=300)
-    reply = _clients[role].chat.completions.create(
-        model=cfg["model"], temperature=0, messages=[{"role": "user", "content": prompt}])
-    return reply.choices[0].message.content or ""
+        _clients[role] = OpenAI(api_key=cfg["api_key"], base_url=cfg["url"], max_retries=2, timeout=300)
+    job = jobs.Job.active
+    for attempt in range(4):
+        started = time.monotonic()
+        reply = _create(_clients[role], cfg, prompt)
+        if job and reply.usage:
+            job.add_usage(role, reply.usage.prompt_tokens or 0, reply.usage.completion_tokens or 0)
+            print(f"[{role}] {cfg['model']}: {time.monotonic() - started:.1f}s, "
+                  f"{reply.usage.prompt_tokens} in / {reply.usage.completion_tokens} out", flush=True)
+        if reply.choices:
+            return reply.choices[0].message.content or ""
+        # some providers (OpenRouter) answer HTTP 200 with an error body and no choices
+        error = getattr(reply, "error", None) or (reply.model_extra or {}).get("error")
+        print(f"[{role}] empty reply, try {attempt + 1} of 4: {error}", flush=True)
+        for _ in range(2 ** attempt * 2):
+            time.sleep(0.5)
+            if job:
+                job.check_stop()
+    raise SystemExit(f"The {role} model returned no answer after 4 tries ({cfg['model']} at {cfg['url']}): {error}. "
+                     "Check the model name, your credit and rate limits, then run the command again to continue.")
 
 
 def first_json(text: str):

@@ -1,0 +1,24 @@
+Task: question_check
+
+You check a question against evidence quotes. Judge from the quotes alone, not from your own knowledge. The quotes may be in a different language from the question.
+
+Question as the user types it:
+$question
+
+Question rewritten so that it can be understood on its own:
+$resolved_question
+
+Evidence quotes:
+$quotes
+
+Definitions:
+- Standalone: A person who has not seen the document or any earlier turn knows what is being asked. "What does the author conclude in section 3?" is not standalone.
+
+Do these steps:
+1. "question_standalone": is the question as the user types it standalone?
+2. "resolved_standalone": is the rewritten question standalone?
+3. "answerable": can the rewritten question be fully answered from the quotes?
+4. "quotes_used": for each quote, in order, true if you needed it to answer, else false.
+
+Return JSON only, in exactly this shape:
+{"question_standalone": true, "resolved_standalone": true, "answerable": true, "quotes_used": [true]}

@@ -181,3 +181,47 @@ def test_ask_retries_once_then_raises(monkeypatch):
     monkeypatch.setattr(llm, "call", lambda role, prompt: "still not json")
     with pytest.raises(llm.BadReply):
         llm.ask("gen", "p", Page)
+
+
+class _Client:
+    """Stands in for the OpenAI client; `delay` is how long one request takes."""
+    def __init__(self, delay=0.0):
+        self.delay = delay
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kw):
+        import time
+        from types import SimpleNamespace as NS
+        time.sleep(self.delay)
+        return NS(choices=[NS(message=NS(content="hi"))], usage=NS(prompt_tokens=7, completion_tokens=3))
+
+
+def _models(monkeypatch, delay):
+    for k in ("API_KEY", "URL", "MODEL"):
+        monkeypatch.setenv(f"GEN_AI_{k}", "x")
+    monkeypatch.setattr(llm, "_clients", {"gen": _Client(delay)})
+
+
+def test_model_calls_inside_a_job_are_counted(root, monkeypatch):
+    _models(monkeypatch, 0)
+    d = root / "datasets" / "d"
+    with jobs.Job(d, "generate"):
+        assert llm.call("gen", "p") == "hi" and llm.call("gen", "p") == "hi"
+    assert jobs.usage(d) == {"gen": {"calls": 2, "prompt": 14, "completion": 6}}
+    with jobs.Job(d, "generate"):  # a restart adds to the total
+        llm.call("gen", "p")
+    assert jobs.usage(d)["gen"]["calls"] == 3
+
+
+def test_stop_abandons_a_model_call_in_flight(root, monkeypatch):
+    import threading
+    import time
+    _models(monkeypatch, 30)  # a request that would take 30 s
+    d = root / "datasets" / "d"
+    threading.Timer(0.3, jobs.request_stop, [d]).start()
+    t0 = time.monotonic()
+    with pytest.raises(jobs.Stopped):
+        with jobs.Job(d, "generate"):
+            llm.call("gen", "p")
+    assert time.monotonic() - t0 < 5 and not jobs.is_running(d)

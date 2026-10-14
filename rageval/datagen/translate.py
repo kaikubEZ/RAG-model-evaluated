@@ -1,4 +1,4 @@
-"""`rageval translate`: variants of approved questions in the extra test languages (architecture 3.5)."""
+"""`rageval-datagen translate`, stage 3: variants of approved questions in the extra test languages (architecture 3.5)."""
 import hashlib
 import json
 
@@ -14,6 +14,7 @@ class _Translated(BaseModel):
     id: str
     question: str
     resolved_question: str
+    reference_answer: str
     gold_ans: list[str]
 
 
@@ -40,21 +41,21 @@ def _valid(reply: _Reply, shape: type[BaseModel]) -> dict:
 
 def _fingerprint(q: Question) -> str:
     """What a dropped variant was dropped for; an edited source question gets a fresh try."""
-    return hashlib.sha256(json.dumps([q.question, q.resolved_question, q.gold_ans]).encode()).hexdigest()[:12]
+    return hashlib.sha256(json.dumps([q.question, q.resolved_question, q.reference_answer, q.gold_ans]).encode()).hexdigest()[:12]
 
 
 def _todo(rows: list[Question], build: dict, lang: str) -> list[Question]:
-    """Approved source-language questions that still need a variant in `lang`; first turns before follow-ups."""
+    """Approved source-language questions with approved answers that still need a variant in `lang`; first turns first."""
     have = {r.id for r in rows}
-    approved = {r.id: r for r in rows if r.status == "approved" and not r.is_translated}
+    approved = {r.id: r for r in rows if r.status == "approved" and r.answer_ready and not r.is_translated}
     dropped = build.get("translation_dropped", {})
 
     def gone(q: Question) -> bool:
-        return dropped.get(f"{q.base_id}.{lang}") == _fingerprint(q)
+        return dropped.get(f"{q.base_id}-{lang}") == _fingerprint(q)
 
     out = []
     for q in approved.values():
-        if q.source_lang == lang or f"{q.base_id}.{lang}" in have or gone(q):
+        if q.source_lang == lang or f"{q.base_id}-{lang}" in have or gone(q):
             continue
         if q.is_follow_up:
             first = approved.get(q.previous_id)
@@ -79,7 +80,8 @@ def drop_variants(rows: list[Question], base_id: str) -> list[Question]:
 
 def _translate(batch: list[Question], lang: str) -> dict[str, _Translated]:
     """One translate call and one meaning check; only the items that pass are returned."""
-    items = [{"id": q.id, "question": q.question, "resolved_question": q.resolved_question, "gold_ans": q.gold_ans}
+    items = [{"id": q.id, "question": q.question, "resolved_question": q.resolved_question,
+              "reference_answer": q.reference_answer or "", "gold_ans": q.gold_ans}
              for q in batch]
     try:
         translated = _valid(llm.ask("gen", llm.render("translate", lang=lang, items=items), _Reply), _Translated)
@@ -119,15 +121,17 @@ def run(dataset_id: str) -> dict:
                     previous = None
                     if q.is_follow_up:
                         first = next(r for r in rows if r.id == q.previous_id)
-                        previous = first.id if first.source_lang == lang else f"{first.base_id}.{lang}"
+                        previous = first.id if first.source_lang == lang else f"{first.base_id}-{lang}"
                     if t is None or (previous and previous not in {r.id for r in rows}):
-                        build.setdefault("translation_dropped", {})[f"{q.base_id}.{lang}"] = _fingerprint(q)
+                        build.setdefault("translation_dropped", {})[f"{q.base_id}-{lang}"] = _fingerprint(q)
                         dropped += 1
                         continue
                     same = q.question == q.resolved_question
                     rows.append(q.model_copy(update={
-                        "id": f"{q.base_id}.{lang}", "lang": lang, "question": t.question,
+                        "id": f"{q.base_id}-{lang}", "lang": lang, "question": t.question,
                         "resolved_question": t.question if same else t.resolved_question, "gold_ans": t.gold_ans,
+                        "reference_answer": t.reference_answer if q.answerable else None,
+                        "answer_status": "approved" if q.answerable else "none",
                         "previous_id": previous, "status": "approved", "translation_reviewed": False,
                         "closed_book": False, "closest_passage": None, "note": None}))
                     created += 1

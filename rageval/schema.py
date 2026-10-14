@@ -10,6 +10,7 @@ QuestionType = Literal["fact", "definition", "comparison", "multi_hop", "excepti
 Scenario = Literal["same", "similar", "diff_topic"]
 Difficulty = Literal["easy", "medium", "hard"]
 Status = Literal["candidate", "approved", "rejected"]
+AnswerStatus = Literal["none", "candidate", "approved"]
 Verdict = Literal["supported", "contradicted", "absent"]
 
 
@@ -31,7 +32,7 @@ class Evidence(Row):
 
 
 class Question(Row):
-    id: str  # base_id for a source-language question, base_id + "." + lang for a translated variant
+    id: str  # base_id + "-" + lang, for example med-001-en; its translations are med-001-th and so on
     base_id: str
     subject: str
     lang: str
@@ -43,7 +44,9 @@ class Question(Row):
     question_type: QuestionType
     difficulty: Difficulty | None = None
     answerable: bool
-    gold_ans: list[str] = []
+    gold_ans: list[str] = []  # the required facts, drafted by the answer stage
+    reference_answer: str | None = None
+    answer_status: AnswerStatus = "none"  # none until the answer stage drafts it; approved by the reviewer
     gold_evidence: list[Evidence] = []
     hard_negative: Evidence | None = None  # deferred in v1: always None
     closed_book: bool = False
@@ -56,6 +59,11 @@ class Question(Row):
     @property
     def is_follow_up(self) -> bool:
         return self.previous_id is not None
+
+    @property
+    def answer_ready(self) -> bool:
+        """An unanswerable question needs no answer; any other needs an approved one before it is translated or frozen."""
+        return not self.answerable or self.answer_status == "approved"
 
     @property
     def is_translated(self) -> bool:

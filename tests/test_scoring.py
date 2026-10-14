@@ -1026,7 +1026,8 @@ def test_changed_questions_file_is_refused_by_run_and_score(root, monkeypatch, f
 def test_dataset_written_by_freeze_passes_the_hash_check(root, monkeypatch, fake):
     from rageval.datagen import freeze as freeze_mod
     ds = root / "datasets" / "ds0"
-    store.write_jsonl(ds / "candidates.jsonl", [mk("a", gold=("alpha",), quotes=[QA]), mk("u", answerable=False)])
+    store.write_jsonl(ds / "candidates.jsonl", [mk("a", gold=("alpha",), quotes=[QA], answer_status="approved"),
+                                                     mk("u", answerable=False)])
     frozen = freeze_mod.run("ds0")
     assert frozen["sha256"] == store.sha256(ds / "questions.jsonl") and frozen["csv_sha256"] == dataset.sha("ds0")
     set_settings(rag_adapter="fake")
@@ -1050,6 +1051,8 @@ def test_csv_round_trip_keeps_every_field_the_scorer_uses(root):
     qs = [mk("a", gold=("alpha", "beta"), quotes=[QA, QB], closed_book=True),
           mk("a.th", lang="th", gold=("alpha",), quotes=[QA]),
           mk("f", follow="a", scenario="same"), mk("u", answerable=False)]
+    qs = [q.model_copy(update={"reference_answer": "\n".join(q.gold_ans), "answer_status": "approved"}) if q.answerable else q
+          for q in qs]
     did = freeze(root, qs)
     again = dataset.load(did)
     assert [q.model_dump() for q in again] == [q.model_dump() for q in qs]

@@ -96,7 +96,7 @@ class Fake:
         for i in range(n):
             tags = self.tags.get((doc, qtype), [])
             items.append(self.item(doc, qtype, i + 1, slots.get(i + 1), tags.pop(0) if tags else ""))
-        return json.dumps({"language": self.lang.get(doc, LANG[doc]), "items": items})
+        return json.dumps({"items": items})
 
     def item(self, doc, qtype, slot, rng, tag):
         self.n += 1
@@ -123,8 +123,24 @@ class Fake:
         if tag == "NULLPAGE":
             evidence = [{"page": None, "quote": "x"}]
         if qtype == "unanswerable":
-            return {"slot": slot, "question": question, "gold_ans": [], "gold_evidence": []}
-        return {"slot": slot, "question": question, "gold_ans": [f"kp-{self.n}"], "gold_evidence": evidence}
+            return {"slot": slot, "question": question, "gold_evidence": []}
+        return {"slot": slot, "question": question, "gold_evidence": evidence}
+
+    def question_check(self, prompt):
+        typed, resolved = re.search(r"types it:\n(.*?)\n\nQuestion rewritten.*?:\n(.*?)\n\nEvidence", prompt, re.S).groups()
+        quotes = len(re.findall(r"^Quote \d+:", prompt, re.M))
+        return json.dumps({
+            "question_standalone": typed == resolved or "ISSTANDALONE" in typed,
+            "resolved_standalone": "NOTSTANDALONE" not in resolved,
+            "answerable": "NOTCOVERED" not in typed,
+            "quotes_used": [True] + [False if "UNUSED" in typed else True] * (quotes - 1),
+        })
+
+    def answer(self, prompt):
+        q = re.search(r"Question:\n(.*?)\n\nQuestion rewritten", prompt, re.S)[1]
+        if "BADANSWER" in q:
+            return "this is not json"
+        return json.dumps({"reference_answer": f"answer to {q[:12]}", "required_facts": [f"fact of {q[:12]}"]})
 
     def answerable(self, prompt):
         typed, resolved = re.search(r"types it:\n(.*?)\n\nQuestion rewritten.*?:\n(.*?)\n\nGold", prompt, re.S).groups()
@@ -165,9 +181,9 @@ class Fake:
                 resolved = f"{body} {tag}".strip()
                 typed = f"and then {words(9000 + self.n, 2)} {tag}".strip() if sc == "same" else resolved
                 items.append({"scenario": sc, "previous_id": first.id, "question": typed, "resolved_question": resolved,
-                              "question_type": "fact", "gold_ans": ["kp"],
+                              "question_type": "fact",
                               "gold_evidence": [{"page": page, "quote": quote(doc, page)}]})
-        return json.dumps({"language": LANG[doc], "items": items})
+        return json.dumps({"items": items})
 
     def translate(self, prompt):
         lang = re.search(r'code "(\w+)"', prompt)[1]
@@ -182,6 +198,7 @@ class Fake:
                 continue
             out.append({"id": it["id"], "question": f"{mark}[{lang}] {it['question']}",
                         "resolved_question": f"{mark}[{lang}] {it['resolved_question']}",
+                        "reference_answer": f"[{lang}] {it['reference_answer']}",
                         "gold_ans": [f"[{lang}] {a}" for a in it["gold_ans"]]})
         return json.dumps({"items": out})
 
@@ -278,12 +295,12 @@ def ev(doc="law/a.txt", page=1, body=None):
     return Evidence(doc=doc, page=page, quote=body or PMAP[(doc, page)][:200])
 
 
-def mk(qid="law-0001", qtype="fact", **kw):
-    base = dict(id=qid, base_id=qid, subject="law", lang="en", source_lang="en", question=f"{words(zlib.crc32(qid.encode()) % 99999)}?",
+def mk(qid="law-001-en", qtype="fact", **kw):
+    base = dict(id=qid, base_id=qid.rsplit("-", 1)[0], subject="law", lang="en", source_lang="en", question=f"{words(zlib.crc32(qid.encode()) % 99999)}?",
                 question_type=qtype, answerable=qtype != "unanswerable", status="candidate")
     base.setdefault("resolved_question", kw.get("question") or base["question"])
     if qtype != "unanswerable":
-        base.update(gold_ans=["kp"], gold_evidence=[ev()])
+        base.update(gold_ans=["kp"], reference_answer="ref", answer_status="approved", gold_evidence=[ev()])
     return Question(**{**base, **kw})
 
 
@@ -309,20 +326,20 @@ def test_check_row_structure_per_type():
 
 
 def test_check_row_duplicate():
-    first = mk("law-0001", question="what is the rule on late filing of reports?")
-    near = mk("law-0002", question="what is the rule on late filing of reports")
+    first = mk("law-001-en", question="what is the rule on late filing of reports?")
+    near = mk("law-002-en", question="what is the rule on late filing of reports")
     assert validate.check_row(near, PMAP, [first]).startswith("duplicate")
-    assert validate.check_row(mk("law-0003"), PMAP, [first]) is None
+    assert validate.check_row(mk("law-003-en"), PMAP, [first]) is None
 
 
 def follow(scenario, page, doc="law/a.txt", **kw):
     typed = "and when did it end?" if scenario == "same" else "a standalone question about something else entirely"
     resolved = "when did the first thing end?" if scenario == "same" else typed
-    return mk("law-0009", question=typed, resolved_question=resolved, previous_id="law-0001", scenario=scenario,
+    return mk("law-009-en", question=typed, resolved_question=resolved, previous_id="law-001-en", scenario=scenario,
               gold_evidence=[ev(doc, page)], **kw)
 
 
-FIRST = mk("law-0001", question="what is the first thing about the first rule?")
+FIRST = mk("law-001-en", question="what is the first thing about the first rule?")
 
 
 @pytest.mark.parametrize("scenario,good,bad", [
@@ -343,7 +360,7 @@ def test_check_row_follow_up_rules():
     similar = follow("similar", 2)
     assert validate.check_row(similar.model_copy(update={"resolved_question": "different"}), PMAP, [FIRST]).startswith("structure")
     assert validate.check_row(follow("same", 1), PMAP, []).startswith("structure")  # first turn not found
-    unanswerable = mk("law-0009", qtype="unanswerable", previous_id="law-0001", scenario="similar")
+    unanswerable = mk("law-009-en", qtype="unanswerable", previous_id="law-001-en", scenario="similar")
     assert validate.check_row(unanswerable, PMAP, [FIRST]).startswith("structure")
 
 
@@ -400,9 +417,10 @@ def test_generate_end_to_end_counts_every_drop(material, root, fake):
 
     rows = candidates(root)
     assert dataset in {p.name for p in (root / "datasets").iterdir()}
-    assert len({q.id for q in rows}) == len(rows) and all(re.fullmatch(r"(law|th)-\d{4}", q.id) for q in rows)
+    assert len({q.id for q in rows}) == len(rows) and all(re.fullmatch(r"(law|th)-\d{3}-en", q.id) for q in rows)
     assert all(q.status == "candidate" and q.hard_negative is None for q in rows)
-    assert {q.lang for q in rows if q.subject == "th"} == {"th"} and {q.lang for q in rows if q.subject == "law"} == {"en"}
+    assert {q.lang for q in rows} == {"en"} and all(q.base_id == q.id[:-3] and not q.gold_ans for q in rows)
+    assert all(q.answer_status == "none" and q.reference_answer is None for q in rows)
     assert all(q.difficulty for q in rows if q.answerable)
 
     dropped = build_of(root)["dropped"]
@@ -498,23 +516,23 @@ def dataset(root, rows, name="ds"):
 
 def test_translate_creates_variants_idempotently(root, fake):
     small_settings(extra_langs=["th", "fr"])
-    rows = [row("law-0001"), row("law-0002", lang="th", source_lang="th"), follow_row("law-0003", "law-0001"),
-            follow_row("law-0004", "law-0002", "same"), row("law-0005").model_copy(update={"status": "candidate"})]
+    rows = [row("law-001-en"), row("law-002-en", lang="th", source_lang="th"), follow_row("law-003-en", "law-001-en"),
+            follow_row("law-004-en", "law-002-en", "same"), row("law-005-en").model_copy(update={"status": "candidate"})]
     ds = dataset(root, rows)
     assert len(translate.missing(ds)) == 7  # th: the three English-source questions; fr: all four approved ones
     first = translate.run(ds)
     out = {q.id: q for q in store.read_jsonl(root / "datasets" / ds / "candidates.jsonl", Question)}
     assert first == {"created": 7, "dropped": 0} and len(out) == len(rows) + 7
-    assert "law-0001.th" in out and "law-0001.fr" in out and "law-0002.fr" in out
-    assert "law-0002.th" not in out  # already Thai
-    assert "law-0005.th" not in out  # not approved
-    v = out["law-0003.th"]
-    assert v.previous_id == "law-0001.th" and v.base_id == "law-0003" and v.lang == "th" and v.source_lang == "en"
+    assert "law-001-th" in out and "law-001-fr" in out and "law-002-fr" in out
+    assert "law-002-th" not in out  # already Thai
+    assert "law-005-th" not in out  # not approved
+    v = out["law-003-th"]
+    assert v.previous_id == "law-001-th" and v.base_id == "law-003" and v.lang == "th" and v.source_lang == "en"
     assert v.question == v.resolved_question and v.status == "approved" and not v.translation_reviewed
-    assert out["law-0004.fr"].previous_id == "law-0002.fr"
-    assert out["law-0004.th"].previous_id == "law-0002"  # its first turn is already Thai
-    assert out["law-0004.th"].question != out["law-0004.th"].resolved_question
-    assert v.gold_evidence == out["law-0003"].gold_evidence
+    assert out["law-004-fr"].previous_id == "law-002-fr"
+    assert out["law-004-th"].previous_id == "law-002-en"  # its first turn is already Thai
+    assert out["law-004-th"].question != out["law-004-th"].resolved_question
+    assert v.gold_evidence == out["law-003-en"].gold_evidence
     assert translate.missing(ds) == []
     calls = len(fake.tasks)
     assert translate.run(ds) == {"created": 0, "dropped": 0} and len(fake.tasks) == calls
@@ -522,59 +540,59 @@ def test_translate_creates_variants_idempotently(root, fake):
 
 def test_translate_retries_once_then_drops(root, fake):
     small_settings(extra_langs=["fr"])
-    ds = dataset(root, [row("law-0001"), row("law-0002"), row("law-0003"), follow_row("law-0004", "law-0002")])
-    fake.flaky = {"law-0001": 1, "law-0002": 5}
+    ds = dataset(root, [row("law-001-en"), row("law-002-en"), row("law-003-en"), follow_row("law-004-en", "law-002-en")])
+    fake.flaky = {"law-001-en": 1, "law-002-en": 5}
     result = translate.run(ds)
     ids = {q.id for q in store.read_jsonl(root / "datasets" / ds / "candidates.jsonl", Question)}
-    assert "law-0001.fr" in ids and "law-0002.fr" not in ids and "law-0003.fr" in ids
-    assert "law-0004.fr" not in ids  # its first turn has no French variant
+    assert "law-001-fr" in ids and "law-002-fr" not in ids and "law-003-fr" in ids
+    assert "law-004-fr" not in ids  # its first turn has no French variant
     assert result["dropped"] == 2 and result["created"] == 2
     assert translate.missing(ds) == []  # dropped variants are reported, not missing
     # editing the source question gives it a fresh try
     rows = store.read_jsonl(root / "datasets" / ds / "candidates.jsonl", Question)
-    rows = [r.model_copy(update={"question": "edited " + r.question}) if r.id == "law-0002" else r for r in rows]
+    rows = [r.model_copy(update={"question": "edited " + r.question}) if r.id == "law-002-en" else r for r in rows]
     store.write_jsonl(root / "datasets" / ds / "candidates.jsonl", rows)
-    assert ("law-0002", "fr") in translate.missing(ds)
+    assert ("law-002", "fr") in translate.missing(ds)
 
 
 def test_drop_variants():
-    first = mk("law-0001")
-    rows = [first, first.model_copy(update={"id": "law-0001.th", "lang": "th"}), mk("law-0002")]
-    assert [r.id for r in translate.drop_variants(rows, "law-0001")] == ["law-0001", "law-0002"]
+    first = mk("law-001-en")
+    rows = [first, first.model_copy(update={"id": "law-001-th", "lang": "th"}), mk("law-002-en")]
+    assert [r.id for r in translate.drop_variants(rows, "law-001")] == ["law-001-en", "law-002-en"]
 
 
 def test_select_respects_targets_and_keeps_first_turns():
     s = settings.Settings(questions_per_subject={"fact": 2, "definition": 1, "comparison": 0, "multi_hop": 0,
                                                   "exception": 0, "unanswerable": 0},
                           follow_ups_per_subject={"same": 0, "similar": 1, "diff_topic": 0})
-    rows = [row("law-0001"), row("law-0002"), row("law-0003"), row("law-0004", "definition"), row("law-0005", "definition"),
-            row("law-0006"), follow_row("law-0007", "law-0006"), follow_row("law-0008", "law-0001"),
-            follow_row("law-0009", "law-0010"), row("law-0010").model_copy(update={"status": "candidate"}),
-            row("law-0011").model_copy(update={"status": "rejected"})]
+    rows = [row("law-001-en"), row("law-002-en"), row("law-003-en"), row("law-004-en", "definition"), row("law-005-en", "definition"),
+            row("law-006-en"), follow_row("law-007-en", "law-006-en"), follow_row("law-008-en", "law-001-en"),
+            follow_row("law-009-en", "law-010-en"), row("law-010-en").model_copy(update={"status": "candidate"}),
+            row("law-011-en").model_copy(update={"status": "rejected"})]
     ids = [q.id for q in freeze.select(rows, s)]
-    # similar target is 1: law-0007 wins and brings its first turn law-0006 (counted as a fact), so one more fact fits;
-    # law-0009's first turn is not approved, and rejected or candidate rows never count
-    assert ids == ["law-0001", "law-0004", "law-0006", "law-0007"]
+    # similar target is 1: law-007-en wins and brings its first turn law-006-en (counted as a fact), so one more fact fits;
+    # law-009-en's first turn is not approved, and rejected or candidate rows never count
+    assert ids == ["law-001-en", "law-004-en", "law-006-en", "law-007-en"]
 
 
 def test_select_takes_variants_of_selected_questions_only():
     s = settings.Settings(questions_per_subject={"fact": 1, "definition": 0, "comparison": 0, "multi_hop": 0,
                                                   "exception": 0, "unanswerable": 0},
                           follow_ups_per_subject={"same": 0, "similar": 1, "diff_topic": 0})
-    first, extra, fu = row("law-0001"), row("law-0002"), follow_row("law-0003", "law-0001")
+    first, extra, fu = row("law-001-en"), row("law-002-en"), follow_row("law-003-en", "law-001-en")
 
     def variant(q, prev=None, **kw):
-        return q.model_copy(update={"id": f"{q.id}.th", "lang": "th", "previous_id": prev or q.previous_id, **kw})
+        return q.model_copy(update={"id": f"{q.id[:-3]}-th", "lang": "th", "previous_id": prev or q.previous_id, **kw})
 
-    rows = [first, extra, fu, variant(first), variant(extra), variant(fu, "law-0001.th"),
-            variant(fu, "law-0001.fr", id="law-0003.fr"), variant(first, id="law-0001.de", status="rejected")]
-    # law-0002 is over the fact target, so its variant stays out; law-0003.fr points at a first turn that is not frozen
-    assert [q.id for q in freeze.select(rows, s)] == ["law-0001", "law-0003", "law-0001.th", "law-0003.th"]
+    rows = [first, extra, fu, variant(first), variant(extra), variant(fu, "law-001-th"),
+            variant(fu, "law-001-fr", id="law-003-fr"), variant(first, id="law-001-de", status="rejected")]
+    # law-002-en is over the fact target, so its variant stays out; law-003-fr points at a first turn that is not frozen
+    assert [q.id for q in freeze.select(rows, s)] == ["law-001-en", "law-003-en", "law-001-th", "law-003-th"]
 
 
 def approved_pair(root):
-    rows = [row("law-0001", question="KNOWN fact one", resolved_question="KNOWN fact one"),
-            row("law-0002"), row("law-0003", "unanswerable")]
+    rows = [row("law-001-en", question="KNOWN fact one", resolved_question="KNOWN fact one"),
+            row("law-002-en"), row("law-003-en", "unanswerable")]
     return dataset(root, rows)
 
 
@@ -592,8 +610,8 @@ def test_freeze_flags_closed_book_and_writes_a_stable_manifest(root, fake, fake_
     translate.run(ds)
     m = freeze.run(ds)
     out = {q.id: q for q in store.read_jsonl(root / "datasets" / ds / "questions.jsonl", Question)}
-    assert out["law-0001"].closed_book and not out["law-0002"].closed_book and not out["law-0003"].closed_book
-    assert out["law-0001.th"].closed_book and not out["law-0002.th"].closed_book  # variants inherit
+    assert out["law-001-en"].closed_book and not out["law-002-en"].closed_book and not out["law-003-en"].closed_book
+    assert out["law-001-th"].closed_book and not out["law-002-th"].closed_book  # variants inherit
     assert m["sha256"] == store.sha256(root / "datasets" / ds / "questions.jsonl")
     assert store.read_json(root / "datasets" / ds / "manifest.json") == m
     assert m["translations"] == 3 and m["translations_reviewed"] == 0 and m["languages"] == ["en", "th"]
@@ -671,30 +689,9 @@ def test_one_malformed_item_does_not_discard_the_batch(material, root, fake):
 
 def test_one_malformed_translation_fails_only_that_question(root, fake):
     small_settings(extra_langs=["fr"])
-    ds = dataset(root, [row("law-0001"), row("law-0002")])
-    fake.broken = {"law-0001"}
+    ds = dataset(root, [row("law-001-en"), row("law-002-en")])
+    fake.broken = {"law-001-en"}
     assert translate.run(ds) == {"created": 1, "dropped": 1}
-
-
-@pytest.mark.parametrize("raw,code", [("en", "en"), ("EN", "en"), (" en-US ", "en"), ("th_TH", "th"),
-                                      ("English", None), ("e", None), ("", None), ("e1", None)])
-def test_language_code_is_normalised(raw, code):
-    assert generate._language(raw) == code
-
-
-def test_language_reply_is_normalised_or_rejected_and_never_pinned(material, root, fake):
-    small_settings(**ONE_TYPE)
-    fake.lang = {"th/c.txt": "TH-th"}
-    generate.run("th")
-    assert build_of(root)["langs"] == {"th/c.txt": "th"} and {q.lang for q in candidates(root)} == {"th"}
-    for d in (root / "datasets").iterdir():
-        for f in d.iterdir():
-            f.unlink()
-        d.rmdir()
-    fake.lang = {"th/c.txt": "Thai"}
-    generate.run("th")
-    assert not list((root / "datasets").glob("*/candidates.jsonl")) and build_of(root)["langs"] == {}
-    assert build_of(root)["dropped"]["bad_reply"] == {"fact": 3}  # all three rounds
 
 
 def test_crash_while_committing_never_reuses_an_id_or_keeps_half_a_batch(material, root, fake, monkeypatch):
@@ -727,10 +724,10 @@ def test_closed_book_with_an_unusable_judge_reply_still_freezes(root, fake, monk
     mod = SimpleNamespace(answer_check=check)
     monkeypatch.setitem(sys.modules, "rageval.judge", mod)
     monkeypatch.setattr(rageval, "judge", mod, raising=False)
-    ds = dataset(root, [row("law-0001", question="BADJUDGE one", resolved_question="BADJUDGE one"), row("law-0002")])
+    ds = dataset(root, [row("law-001-en", question="BADJUDGE one", resolved_question="BADJUDGE one"), row("law-002-en")])
     m = freeze.run(ds)
     out = {q.id: q for q in store.read_jsonl(root / "datasets" / ds / "questions.jsonl", Question)}
-    assert not out["law-0001"].closed_book and out["law-0002"].closed_book and m["closed_book_unchecked"] == 1
+    assert not out["law-001-en"].closed_book and out["law-002-en"].closed_book and m["closed_book_unchecked"] == 1
 
 
 def test_translate_refuses_a_frozen_dataset(root, fake, fake_judge):
@@ -742,3 +739,97 @@ def test_translate_refuses_a_frozen_dataset(root, fake, fake_judge):
     with pytest.raises(SystemExit, match="frozen"):
         translate.run(ds)
     assert (root / "datasets" / ds / "candidates.jsonl").read_bytes() == before
+
+
+# ---- stage 2: answers ----
+
+def drafted_dataset(root, *rows):
+    return dataset(root, [r.model_copy(update={"gold_ans": [], "reference_answer": None, "answer_status": "none"}) for r in rows])
+
+
+def test_generate_writes_english_questions_without_answers(material, root, fake):
+    small_settings(**ONE_TYPE)
+    generate.run("th")  # a Thai document still gets English questions
+    rows = candidates(root)
+    assert rows and all(q.lang == "en" and q.id == f"{q.base_id}-en" and not q.gold_ans for q in rows)
+    assert all(re.fullmatch(r"th-\d{3}-en", q.id) for q in rows)
+    assert all("Write every question in English" in llm.render("generate", document="", doc="d", qtype="fact", n="1",
+                                                                guidance="", slots="") for _ in [0])
+
+
+def test_answer_stage_drafts_verifies_and_resumes(root, fake):
+    from rageval.datagen import answer
+    ds = drafted_dataset(root, row("law-001-en"), row("law-002-en"), row("law-003-en", "unanswerable"),
+                         row("law-004-en").model_copy(update={"status": "candidate"}))
+    out = answer.run(ds)
+    assert out == {"drafted": 2, "failed": 0}
+    rows = {q.id: q for q in store.read_jsonl(root / "datasets" / ds / "candidates.jsonl", Question)}
+    for qid in ("law-001-en", "law-002-en"):
+        assert rows[qid].answer_status == "candidate" and rows[qid].reference_answer and len(rows[qid].gold_ans) == 1
+        assert rows[qid].note is None
+    assert rows["law-003-en"].answer_status == "none" and rows["law-004-en"].answer_status == "none"
+    with pytest.raises(SystemExit, match="No approved question"):
+        answer.run(ds)  # nothing left to do; a rerun makes no model calls
+    assert fake.tasks.count("answer") == 2
+
+
+def test_answer_stage_keeps_a_failed_check_as_a_note_and_retries_an_unusable_reply(root, fake):
+    from rageval.datagen import answer
+    ds = drafted_dataset(root, row("law-001-en", question="NOTCOVERED why", resolved_question="NOTCOVERED why"),
+                         row("law-002-en", question="BADANSWER what", resolved_question="BADANSWER what"))
+    assert answer.run(ds) == {"drafted": 1, "failed": 1}
+    rows = {q.id: q for q in store.read_jsonl(root / "datasets" / ds / "candidates.jsonl", Question)}
+    assert rows["law-001-en"].answer_status == "candidate" and "answer:" in rows["law-001-en"].note
+    assert rows["law-002-en"].answer_status == "none"  # left for the next start
+
+
+def test_translation_and_freeze_wait_for_approved_answers(root, fake, fake_judge):
+    from rageval.datagen import answer, review
+    small_settings(extra_langs=["th"])
+    ds = drafted_dataset(root, row("law-001-en"), row("law-002-en"))
+    assert translate.missing(ds) == []  # no answers yet, so nothing to translate
+    answer.run(ds)
+    assert translate.missing(ds) == []  # drafted but not approved
+    assert review.set_answer_status(ds, ["law-001-en"], "approved") == 1
+    assert translate.missing(ds) == [("law-001", "th")]
+    translate.run(ds)
+    out = {q.id: q for q in store.read_jsonl(root / "datasets" / ds / "candidates.jsonl", Question)}
+    th = out["law-001-th"]
+    assert th.reference_answer.startswith("[th] ") and th.answer_status == "approved" and th.base_id == "law-001"
+    freeze.run(ds)
+    frozen = {q.id for q in store.read_jsonl(root / "datasets" / ds / "questions.jsonl", Question)}
+    assert frozen == {"law-001-en", "law-001-th"}  # law-002 has no approved answer
+
+
+def test_editing_an_approved_answer_needs_approval_again_and_drops_translations(root):
+    from rageval.datagen import review
+    ds = dataset(root, [row("law-001-en"), row("law-001-th", lang="th").model_copy(update={"base_id": "law-001"})])
+    store.write_jsonl(root / "datasets" / ds / "pages.jsonl", [Page(subject="law", doc=d, page=n, text=t) for (d, n), t in PMAP.items()])
+    first = review.load(ds)[0]
+    assert review.save_row(ds, first.model_copy(update={"reference_answer": "a new answer"})) is None
+    rows = review.load(ds)
+    assert rows[0].answer_status == "candidate" and [r.id for r in rows] == ["law-001-en"]
+    assert review.set_answer_status(ds, ["law-001-en"], "approved") == 1
+
+
+def test_pdf_text_is_cached_between_runs(root, monkeypatch):
+    pdf = root / "material" / "law" / "a.pdf"
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF-1.4 not a real file")
+    calls = []
+
+    class Page_:
+        def extract_text(self):
+            return "page text"
+
+    class Reader:
+        def __init__(self, path):
+            calls.append(path)
+            self.pages = [Page_(), Page_()]
+
+    monkeypatch.setattr(ingest, "PdfReader", Reader)
+    assert ingest._extract(pdf) == ["page text", "page text"]
+    assert ingest._extract(pdf) == ["page text", "page text"] and len(calls) == 1  # second read comes from .cache
+    pdf.write_bytes(b"%PDF-1.4 changed and longer")
+    ingest._extract(pdf)
+    assert len(calls) == 2  # a changed file is read again

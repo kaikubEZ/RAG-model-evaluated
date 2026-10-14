@@ -6,7 +6,7 @@ Question type: $qtype
 Number of questions: $n
 $guidance
 
-Above is one document, with a [[page N]] marker before each page. Write exactly $n questions of type "$qtype" about this document, together with their answers and evidence. Write the questions and key points in the document's own language.
+Above is one document, with a [[page N]] marker before each page. Write exactly $n questions of type "$qtype" about this document, together with their evidence. Write every question in English, even when the document is in another language. Do not write answers yet.
 
 Question types:
 - fact: asks for one fact. Example: "Is UDP reliable?"
@@ -17,17 +17,16 @@ Question types:
 - unanswerable: a plausible question that the document does not answer (see the definition below).
 
 Definitions:
-- Key point: One statement that can be judged true or false on its own. "TCP is connection-oriented" is one; "TCP is connection-oriented and reliable" is two.
-- Evidence quote: One contiguous verbatim span, 100 to 300 characters after normalisation (roughly one to three sentences), that states the key point, not merely one that appears near it. The length counts letters and digits only, not spaces or punctuation, so aim for roughly 130 to 350 characters as written. A page with too little text for that cannot supply a quote; use another page.
+- Evidence quote: One contiguous verbatim span, 100 to 300 characters after normalisation (roughly one to three sentences), that holds the information the question asks for, not merely one that appears near it. Copy it in the document's own language; never translate a quote. The length counts letters and digits only, not spaces or punctuation, so aim for roughly 130 to 350 characters as written. A page with too little text for that cannot supply a quote; use another page.
 - Unanswerable: A question a reader of this subject could reasonably ask, on a topic the document discusses, whose answer the document does not give.
 
 Rules:
-- An answerable question has one to four key points ("gold_ans") and at least one evidence quote. Copy each quote exactly from the page you name, without changing any character. Give only quotes that are needed to state the key points.
+- An answerable question has at least one evidence quote. Copy each quote exactly from the page you name, without changing any character. Give only quotes that are needed to answer the question.
 - A multi_hop question has quotes from at least two different pages.
-- An unanswerable question has empty "gold_ans" and empty "gold_evidence".
+- An unanswerable question has empty "gold_evidence".
 - Each question must be understandable by a person who has not seen the document: do not write "in section 3" or "according to the text".
 - Do not write two questions that ask the same thing.
 $slots
 
 Return JSON only, in exactly this shape:
-{"language": "<ISO 639-1 code of the document's language>", "items": [{"slot": 1, "question": "...", "gold_ans": ["key point"], "gold_evidence": [{"page": 4, "quote": "verbatim text"}]}]}
+{"items": [{"slot": 1, "question": "...", "gold_evidence": [{"page": 4, "quote": "verbatim text"}]}]}

@@ -1,4 +1,4 @@
-"""Data generation commands: generate, translate, freeze (writes dataset.csv), and the app."""
+"""Data generation commands: generate (questions), answer, translate, freeze (writes dataset.csv), and the app."""
 import argparse
 import subprocess
 import sys
@@ -27,12 +27,13 @@ def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="rageval-datagen", description="Generate and freeze a test-case dataset (CSV)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    g = sub.add_parser("generate", help="read material, generate and validate candidate questions")
+    g = sub.add_parser("generate", help="stage 1: read material, generate and validate English questions")
     g.add_argument("--subject")
     g.add_argument("--dataset")
     g.add_argument("--yes", action="store_true", help="do not ask before sending document text")
 
-    for name, text in (("translate", "translate approved questions into the extra test languages"),
+    for name, text in (("answer", "draft and verify English answers for the approved questions"),
+                       ("translate", "translate approved questions and answers into the extra test languages"),
                        ("freeze", "run the closed-book check, freeze the dataset and write dataset.csv")):
         c = sub.add_parser(name, help=text)
         c.add_argument("--dataset")
@@ -47,6 +48,10 @@ def main(argv: list[str] | None = None) -> None:
             from . import generate
             _confirm_privacy(a.yes)
             print("dataset:", generate.run(subject=a.subject, dataset_id=a.dataset))
+        elif a.cmd == "answer":
+            from . import answer
+            _confirm_privacy(a.yes)
+            print(answer.run(_dataset(a.dataset)))
         elif a.cmd == "translate":
             from . import translate
             _confirm_privacy(a.yes)

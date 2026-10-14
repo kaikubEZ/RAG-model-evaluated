@@ -65,6 +65,15 @@ def job_status(target: str) -> None:
         return
     label = f"{d.name}: {p['job']}, {p['step']} {p['done']}/{p['total']}"
     st.progress(min(p["done"] / p["total"], 1.0) if p["total"] else 0.0, text=f"{label} {p['message']}".strip())
+    used = jobs.usage(d)
+    if used:
+        cols = st.columns(len(used) * 3)
+        for i, (role, u) in enumerate(sorted(used.items())):
+            cols[3 * i].metric(f"{role} calls", f"{u['calls']:,}")
+            cols[3 * i + 1].metric(f"{role} tokens in", f"{u['prompt']:,}")
+            cols[3 * i + 2].metric(f"{role} tokens out", f"{u['completion']:,}")
+    with st.expander("Log (last 200 lines)"):
+        st.code(jobs.log_tail() or "(empty)", language=None)
     if p["message"].startswith("failed"):
         st.error(f"{p['message']}. Details are in {store.ROOT / 'rageval-job.log'}.")
     if running and st.button("Stop", key=f"stop|{d}"):

@@ -43,7 +43,7 @@ The app opens in your browser and walks through every step:
 5. **Run and score** — ask the frozen questions to your endpoint and score the answers.
 6. **Results**, **Compare**, **Labelling** — read the report, compare two runs, and check the judge against your own labels.
 
-The program is two parts joined by the CSV in `docs/dataset-contract.md`. Data generation: `rageval-datagen generate`, `translate`, `freeze`. Evaluation: `rageval-eval run`, `score`, `compare`.
+The program is two parts joined by the CSV in `docs/dataset-contract.md`. Data generation, in order: `rageval-datagen generate` (English questions), `answer` (English answers), `translate`, `freeze`. Evaluation: `rageval-eval run`, `score`, `compare`.
 
 Your endpoint must accept `POST {"question": "...", "history": [...]}` and return `{"answer": "...", "contexts": [{"text": "..."}]}`; `contexts` is optional but needed for retrieval scores. Other shapes need a small adapter function in `rageval/evaluation/adapters.py`.
 

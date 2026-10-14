@@ -1,0 +1,604 @@
+Text from your documents will be sent to: openrouter.ai
+[generate] ingest: 1
+[generate] single:0:1cec7411: 54
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\cli.py", line 70, in <module>
+    main()
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\cli.py", line 49, in main
+    print("dataset:", generate.run(subject=a.subject, dataset_id=a.dataset))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 327, in run
+    _stage(st, "single", SINGLE_ROUNDS, _plan_single, _batch_single)
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 288, in _stage
+    batch_fn(st, f"{name}:{i}", *batch)
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 198, in _batch_single
+    if out := _vet(st, q, pool, qtype, rng):
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 149, in _vet
+    out, check = validate.judge_checks(q, st.docs[q.subject])
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\validate.py", line 115, in judge_checks
+    r = llm.ask("judge", llm.render(
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\llm.py", line 78, in ask
+    return adapter.validate_python(first_json(call(role, prompt)))
+                                              ^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\llm.py", line 54, in call
+    return reply.choices[0].message.content or ""
+           ~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+Text from your documents will be sent to: openrouter.ai
+[generate] ingest: 1
+[generate] single:0:1cec7411: 54
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\cli.py", line 70, in <module>
+    main()
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\cli.py", line 49, in main
+    print("dataset:", generate.run(subject=a.subject, dataset_id=a.dataset))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 327, in run
+    _stage(st, "single", SINGLE_ROUNDS, _plan_single, _batch_single)
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 288, in _stage
+    batch_fn(st, f"{name}:{i}", *batch)
+  File "D:\CEDT\RAG-model-evaluated\rageval\datagen\generate.py", line 174, in _batch_single
+    reply = llm.ask("gen", prompt, _Reply)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\llm.py", line 78, in ask
+    return adapter.validate_python(first_json(call(role, prompt)))
+                                              ^^^^^^^^^^^^^^^^^^
+  File "D:\CEDT\RAG-model-evaluated\rageval\llm.py", line 54, in call
+    return reply.choices[0].message.content or ""
+           ~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+Text from your documents will be sent to: openrouter.ai
+[generate] ingest: 1
+[generate] single:0:1cec7411: 54
+Text from your documents will be sent to: api.gateway.chula-ai.com
+[generate] ingest: 1
+[generate] single:0:1cec7411: 54
+[gen] gemini-3.5-flash-lite: 5.8s, 23493 in / 1809 out
+[judge] gemini-3.5-flash-lite: 1.0s, 466 in / 81 out
+[judge] gemini-3.5-flash-lite: 1.0s, 391 in / 86 out
+[judge] gemini-3.5-flash-lite: 0.8s, 379 in / 74 out
+[judge] gemini-3.5-flash-lite: 2.3s, 456 in / 123 out
+[judge] gemini-3.5-flash-lite: 0.8s, 356 in / 81 out
+[gen] gemini-3.5-flash-lite: 4.4s, 12997 in / 1031 out
+[judge] gemini-3.5-flash-lite: 1.1s, 396 in / 87 out
+[judge] gemini-3.5-flash-lite: 1.1s, 457 in / 93 out
+[gen] gemini-3.5-flash-lite: 1.4s, 2971 in / 179 out
+[judge] gemini-3.5-flash-lite: 1.0s, 396 in / 104 out
+[gen] gemini-3.5-flash-lite: 2.6s, 23338 in / 512 out
+[judge] gemini-3.5-flash-lite: 1.3s, 22995 in / 82 out
+[judge] gemini-3.5-flash-lite: 1.1s, 12535 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2584 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.4s, 22993 in / 77 out
+[judge] gemini-3.5-flash-lite: 1.6s, 22997 in / 156 out
+[judge] gemini-3.5-flash-lite: 1.0s, 12537 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.8s, 2586 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.4s, 23006 in / 69 out
+[judge] gemini-3.5-flash-lite: 1.1s, 12546 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2595 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.3s, 23002 in / 37 out
+[judge] gemini-3.5-flash-lite: 1.4s, 22998 in / 108 out
+[judge] gemini-3.5-flash-lite: 1.2s, 12538 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2587 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.5s, 22994 in / 148 out
+[judge] gemini-3.5-flash-lite: 1.1s, 12534 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2583 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.3s, 22998 in / 76 out
+[judge] gemini-3.5-flash-lite: 1.0s, 12538 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2587 in / 27 out
+[gen] gemini-3.5-flash-lite: 1.6s, 12887 in / 245 out
+[judge] gemini-3.5-flash-lite: 1.2s, 22989 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 12529 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2578 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 22991 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 12531 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2580 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 22993 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 12533 in / 71 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2582 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 22991 in / 22 out
+[judge] gemini-3.5-flash-lite: 1.2s, 12531 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2580 in / 27 out
+[gen] gemini-3.5-flash-lite: 1.1s, 2929 in / 56 out
+[judge] gemini-3.5-flash-lite: 1.2s, 22992 in / 22 out
+[judge] gemini-3.5-flash-lite: 1.1s, 12532 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2581 in / 53 out
+[gen] gemini-3.5-flash-lite: 4.0s, 7937 in / 1511 out
+[gen] gemini-3.5-flash-lite: 3.8s, 7937 in / 1365 out
+[judge] gemini-3.5-flash-lite: 1.3s, 442 in / 124 out
+[judge] gemini-3.5-flash-lite: 1.0s, 428 in / 98 out
+[judge] gemini-3.5-flash-lite: 1.0s, 400 in / 100 out
+[judge] gemini-3.5-flash-lite: 0.9s, 488 in / 88 out
+[gen] gemini-3.5-flash-lite: 2.9s, 7079 in / 844 out
+[judge] gemini-3.5-flash-lite: 1.1s, 404 in / 79 out
+[judge] gemini-3.5-flash-lite: 1.0s, 426 in / 94 out
+[judge] gemini-3.5-flash-lite: 0.9s, 401 in / 89 out
+[gen] gemini-3.5-flash-lite: 1.7s, 2977 in / 297 out
+[judge] gemini-3.5-flash-lite: 0.9s, 436 in / 91 out
+[gen] gemini-3.5-flash-lite: 4.7s, 7937 in / 1631 out
+[judge] gemini-3.5-flash-lite: 0.9s, 364 in / 98 out
+[judge] gemini-3.5-flash-lite: 1.2s, 418 in / 121 out
+[judge] gemini-3.5-flash-lite: 1.1s, 438 in / 135 out
+[judge] gemini-3.5-flash-lite: 1.3s, 423 in / 126 out
+[judge] gemini-3.5-flash-lite: 1.2s, 448 in / 130 out
+[judge] gemini-3.5-flash-lite: 1.1s, 435 in / 119 out
+[judge] gemini-3.5-flash-lite: 1.0s, 447 in / 95 out
+[gen] gemini-3.5-flash-lite: 4.0s, 7079 in / 1392 out
+[judge] gemini-3.5-flash-lite: 1.0s, 456 in / 138 out
+[judge] gemini-3.5-flash-lite: 1.1s, 483 in / 152 out
+[gen] gemini-3.5-flash-lite: 1.5s, 2977 in / 290 out
+[judge] gemini-3.5-flash-lite: 1.2s, 394 in / 126 out
+[judge] gemini-3.5-flash-lite: 1.1s, 412 in / 119 out
+[gen] gemini-3.5-flash-lite: 5.3s, 7937 in / 2006 out
+[judge] gemini-3.5-flash-lite: 1.2s, 494 in / 142 out
+[judge] gemini-3.5-flash-lite: 1.4s, 482 in / 144 out
+[gen] gemini-3.5-flash-lite: 4.9s, 7079 in / 1454 out
+[judge] gemini-3.5-flash-lite: 1.7s, 557 in / 187 out
+[judge] gemini-3.5-flash-lite: 1.2s, 500 in / 149 out
+[judge] gemini-3.5-flash-lite: 1.2s, 497 in / 139 out
+[gen] gemini-3.5-flash-lite: 1.5s, 2977 in / 397 out
+[gen] gemini-3.5-flash-lite: 1.7s, 2977 in / 451 out
+[gen] gemini-3.5-flash-lite: 7.9s, 7941 in / 2625 out
+[gen] gemini-3.5-flash-lite: 7.6s, 7941 in / 2787 out
+[gen] gemini-3.5-flash-lite: 5.3s, 7083 in / 1852 out
+[judge] gemini-3.5-flash-lite: 1.4s, 570 in / 163 out
+[judge] gemini-3.5-flash-lite: 1.4s, 598 in / 219 out
+[judge] gemini-3.5-flash-lite: 1.1s, 559 in / 147 out
+[judge] gemini-3.5-flash-lite: 1.1s, 559 in / 177 out
+[judge] gemini-3.5-flash-lite: 1.2s, 585 in / 157 out
+[gen] gemini-3.5-flash-lite: 3.3s, 2981 in / 813 out
+[judge] gemini-3.5-flash-lite: 1.2s, 616 in / 143 out
+[judge] gemini-3.5-flash-lite: 1.4s, 711 in / 289 out
+[gen] gemini-3.5-flash-lite: 4.9s, 7937 in / 1697 out
+[judge] gemini-3.5-flash-lite: 1.3s, 454 in / 100 out
+[judge] gemini-3.5-flash-lite: 1.0s, 476 in / 102 out
+[judge] gemini-3.5-flash-lite: 1.2s, 401 in / 96 out
+[judge] gemini-3.5-flash-lite: 1.0s, 473 in / 87 out
+[judge] gemini-3.5-flash-lite: 1.2s, 504 in / 132 out
+[gen] gemini-3.5-flash-lite: 3.6s, 7079 in / 1025 out
+[judge] gemini-3.5-flash-lite: 1.0s, 438 in / 88 out
+[judge] gemini-3.5-flash-lite: 0.9s, 450 in / 88 out
+[gen] gemini-3.5-flash-lite: 1.8s, 2977 in / 375 out
+[judge] gemini-3.5-flash-lite: 1.1s, 500 in / 95 out
+[gen] gemini-3.5-flash-lite: 2.0s, 7805 in / 306 out
+[judge] gemini-3.5-flash-lite: 1.1s, 7460 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 6628 in / 50 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2578 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 7457 in / 100 out
+[judge] gemini-3.5-flash-lite: 1.1s, 6625 in / 38 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2575 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 7454 in / 101 out
+[judge] gemini-3.5-flash-lite: 1.0s, 6622 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2572 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 7467 in / 39 out
+[judge] gemini-3.5-flash-lite: 1.2s, 6635 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2585 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 7469 in / 66 out
+[judge] gemini-3.5-flash-lite: 1.0s, 6637 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2587 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.3s, 7469 in / 145 out
+[judge] gemini-3.5-flash-lite: 1.1s, 6637 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 2587 in / 27 out
+[gen] gemini-3.5-flash-lite: 2.0s, 6973 in / 338 out
+[judge] gemini-3.5-flash-lite: 1.0s, 7456 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 6624 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2574 in / 38 out
+[judge] gemini-3.5-flash-lite: 1.1s, 7469 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.3s, 6637 in / 140 out
+[judge] gemini-3.5-flash-lite: 1.3s, 6637 in / 140 out
+[judge] gemini-3.5-flash-lite: 1.1s, 7465 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 6633 in / 48 out
+[judge] gemini-3.5-flash-lite: 1.1s, 2583 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 7466 in / 60 out
+[judge] gemini-3.5-flash-lite: 1.4s, 6634 in / 176 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2584 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 7462 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 6630 in / 58 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2580 in / 27 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2922 in / 113 out
+[judge] gemini-3.5-flash-lite: 0.9s, 7463 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 6631 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.8s, 2581 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 7464 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 6632 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.8s, 2582 in / 57 out
+[gen] gemini-3.5-flash-lite: 2.9s, 4761 in / 846 out
+[judge] gemini-3.5-flash-lite: 1.1s, 391 in / 109 out
+[judge] gemini-3.5-flash-lite: 0.9s, 387 in / 92 out
+[judge] gemini-3.5-flash-lite: 1.1s, 431 in / 137 out
+[gen] gemini-3.5-flash-lite: 2.2s, 4811 in / 574 out
+[judge] gemini-3.5-flash-lite: 0.8s, 371 in / 80 out
+[gen] gemini-3.5-flash-lite: 3.4s, 8897 in / 1128 out
+[judge] gemini-3.5-flash-lite: 0.9s, 361 in / 77 out
+[judge] gemini-3.5-flash-lite: 1.1s, 374 in / 93 out
+[judge] gemini-3.5-flash-lite: 0.9s, 353 in / 65 out
+[judge] gemini-3.5-flash-lite: 0.9s, 359 in / 64 out
+[judge] gemini-3.5-flash-lite: 1.0s, 393 in / 93 out
+[gen] gemini-3.5-flash-lite: 2.6s, 4761 in / 704 out
+[judge] gemini-3.5-flash-lite: 0.9s, 382 in / 64 out
+[judge] gemini-3.5-flash-lite: 1.1s, 395 in / 64 out
+[judge] gemini-3.5-flash-lite: 1.1s, 391 in / 100 out
+[judge] gemini-3.5-flash-lite: 0.9s, 385 in / 95 out
+[gen] gemini-3.5-flash-lite: 2.2s, 4811 in / 628 out
+[judge] gemini-3.5-flash-lite: 1.1s, 384 in / 102 out
+[judge] gemini-3.5-flash-lite: 0.9s, 379 in / 83 out
+[judge] gemini-3.5-flash-lite: 1.0s, 374 in / 89 out
+[gen] gemini-3.5-flash-lite: 5.1s, 8897 in / 2229 out
+[judge] gemini-3.5-flash-lite: 1.3s, 460 in / 119 out
+[judge] gemini-3.5-flash-lite: 1.1s, 413 in / 152 out
+[judge] gemini-3.5-flash-lite: 1.0s, 490 in / 139 out
+[gen] gemini-3.5-flash-lite: 2.3s, 4761 in / 711 out
+[judge] gemini-3.5-flash-lite: 1.3s, 460 in / 156 out
+[judge] gemini-3.5-flash-lite: 1.3s, 430 in / 204 out
+[judge] gemini-3.5-flash-lite: 0.9s, 435 in / 117 out
+[gen] gemini-3.5-flash-lite: 2.8s, 4811 in / 855 out
+[judge] gemini-3.5-flash-lite: 1.2s, 500 in / 160 out
+[gen] gemini-3.5-flash-lite: 5.6s, 8897 in / 2020 out
+[judge] gemini-3.5-flash-lite: 1.1s, 418 in / 87 out
+[judge] gemini-3.5-flash-lite: 1.0s, 474 in / 104 out
+[judge] gemini-3.5-flash-lite: 1.2s, 539 in / 179 out
+[judge] gemini-3.5-flash-lite: 1.0s, 385 in / 97 out
+[judge] gemini-3.5-flash-lite: 1.0s, 423 in / 92 out
+[gen] gemini-3.5-flash-lite: 3.3s, 4765 in / 1115 out
+[gen] gemini-3.5-flash-lite: 2.4s, 4765 in / 647 out
+[judge] gemini-3.5-flash-lite: 1.1s, 453 in / 102 out
+[gen] gemini-3.5-flash-lite: 3.7s, 4815 in / 1233 out
+[judge] gemini-3.5-flash-lite: 1.0s, 489 in / 147 out
+[gen] gemini-3.5-flash-lite: 7.4s, 8901 in / 2387 out
+[judge] gemini-3.5-flash-lite: 1.2s, 528 in / 145 out
+[gen] gemini-3.5-flash-lite: 3.0s, 4761 in / 801 out
+[gen] gemini-3.5-flash-lite: 2.5s, 4761 in / 537 out
+[judge] gemini-3.5-flash-lite: 1.0s, 430 in / 115 out
+[judge] gemini-3.5-flash-lite: 1.2s, 409 in / 80 out
+[gen] gemini-3.5-flash-lite: 2.7s, 4811 in / 648 out
+[judge] gemini-3.5-flash-lite: 1.4s, 394 in / 67 out
+[judge] gemini-3.5-flash-lite: 0.9s, 393 in / 69 out
+[gen] gemini-3.5-flash-lite: 3.3s, 8897 in / 1044 out
+[gen] gemini-3.5-flash-lite: 1.4s, 4681 in / 144 out
+[judge] gemini-3.5-flash-lite: 1.2s, 4336 in / 76 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4382 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 8419 in / 51 out
+[judge] gemini-3.5-flash-lite: 1.6s, 4333 in / 83 out
+[judge] gemini-3.5-flash-lite: 0.9s, 4379 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 8416 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 4331 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4377 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 8414 in / 27 out
+[gen] gemini-3.5-flash-lite: 1.5s, 4730 in / 182 out
+[judge] gemini-3.5-flash-lite: 0.9s, 4331 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4377 in / 41 out
+[judge] gemini-3.5-flash-lite: 1.0s, 8414 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4326 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4372 in / 40 out
+[judge] gemini-3.5-flash-lite: 1.0s, 8409 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 4331 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 4377 in / 128 out
+[judge] gemini-3.5-flash-lite: 1.0s, 8414 in / 27 out
+[gen] gemini-3.5-flash-lite: 2.4s, 8764 in / 444 out
+[judge] gemini-3.5-flash-lite: 1.5s, 4356 in / 38 out
+[judge] gemini-3.5-flash-lite: 1.2s, 4402 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 8439 in / 37 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4345 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4391 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 8428 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 4343 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 4389 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 8426 in / 97 out
+[judge] gemini-3.5-flash-lite: 1.2s, 8426 in / 97 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4359 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4405 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 8442 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4354 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 4400 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.4s, 8437 in / 88 out
+[judge] gemini-3.5-flash-lite: 1.2s, 4351 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 4397 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.3s, 8434 in / 107 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4351 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.2s, 4397 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.4s, 8434 in / 154 out
+[generate] single:1:1cec7411: 48
+[gen] gemini-3.5-flash-lite: 3.3s, 23437 in / 1133 out
+[judge] gemini-3.5-flash-lite: 1.0s, 406 in / 73 out
+[judge] gemini-3.5-flash-lite: 1.0s, 377 in / 82 out
+[judge] gemini-3.5-flash-lite: 1.0s, 387 in / 101 out
+[gen] gemini-3.5-flash-lite: 2.1s, 12956 in / 384 out
+[judge] gemini-3.5-flash-lite: 1.0s, 397 in / 88 out
+[gen] gemini-3.5-flash-lite: 2.7s, 23437 in / 642 out
+[judge] gemini-3.5-flash-lite: 0.9s, 355 in / 81 out
+[judge] gemini-3.5-flash-lite: 0.9s, 350 in / 78 out
+[judge] gemini-3.5-flash-lite: 0.8s, 357 in / 77 out
+[judge] gemini-3.5-flash-lite: 0.9s, 377 in / 57 out
+[gen] gemini-3.5-flash-lite: 2.4s, 12956 in / 661 out
+[judge] gemini-3.5-flash-lite: 1.2s, 416 in / 98 out
+[judge] gemini-3.5-flash-lite: 1.0s, 404 in / 66 out
+[gen] gemini-3.5-flash-lite: 1.1s, 2971 in / 83 out
+[gen] gemini-3.5-flash-lite: 3.4s, 23450 in / 1019 out
+[judge] gemini-3.5-flash-lite: 1.0s, 364 in / 83 out
+[judge] gemini-3.5-flash-lite: 0.8s, 436 in / 71 out
+[judge] gemini-3.5-flash-lite: 1.0s, 426 in / 102 out
+[judge] gemini-3.5-flash-lite: 1.1s, 442 in / 115 out
+[gen] gemini-3.5-flash-lite: 2.7s, 12956 in / 816 out
+[judge] gemini-3.5-flash-lite: 1.1s, 550 in / 155 out
+[judge] gemini-3.5-flash-lite: 1.0s, 426 in / 112 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2971 in / 126 out
+[judge] gemini-3.5-flash-lite: 1.0s, 380 in / 98 out
+[gen] gemini-3.5-flash-lite: 6.0s, 23497 in / 2133 out
+[judge] gemini-3.5-flash-lite: 1.2s, 482 in / 120 out
+[judge] gemini-3.5-flash-lite: 1.1s, 476 in / 109 out
+[judge] gemini-3.5-flash-lite: 1.2s, 485 in / 145 out
+[gen] gemini-3.5-flash-lite: 4.7s, 12988 in / 1579 out
+[judge] gemini-3.5-flash-lite: 1.2s, 568 in / 168 out
+[gen] gemini-3.5-flash-lite: 1.3s, 2975 in / 133 out
+[gen] gemini-3.5-flash-lite: 2.6s, 23437 in / 698 out
+[judge] gemini-3.5-flash-lite: 1.0s, 385 in / 84 out
+[judge] gemini-3.5-flash-lite: 0.9s, 411 in / 82 out
+[gen] gemini-3.5-flash-lite: 2.3s, 12956 in / 490 out
+[judge] gemini-3.5-flash-lite: 1.1s, 476 in / 143 out
+[judge] gemini-3.5-flash-lite: 0.9s, 389 in / 78 out
+[gen] gemini-3.5-flash-lite: 1.0s, 2971 in / 95 out
+[gen] gemini-3.5-flash-lite: 1.4s, 23338 in / 63 out
+[judge] gemini-3.5-flash-lite: 1.4s, 22999 in / 22 out
+[judge] gemini-3.5-flash-lite: 1.0s, 12539 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2588 in / 27 out
+[gen] gemini-3.5-flash-lite: 1.1s, 12887 in / 64 out
+[judge] gemini-3.5-flash-lite: 1.2s, 22999 in / 22 out
+[judge] gemini-3.5-flash-lite: 1.1s, 12539 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 2588 in / 27 out
+[gen] gemini-3.5-flash-lite: 3.0s, 7886 in / 864 out
+[judge] gemini-3.5-flash-lite: 1.0s, 404 in / 74 out
+[judge] gemini-3.5-flash-lite: 0.9s, 433 in / 86 out
+[judge] gemini-3.5-flash-lite: 1.2s, 428 in / 92 out
+[gen] gemini-3.5-flash-lite: 2.2s, 7041 in / 467 out
+[judge] gemini-3.5-flash-lite: 1.3s, 460 in / 151 out
+[judge] gemini-3.5-flash-lite: 1.0s, 428 in / 91 out
+[gen] gemini-3.5-flash-lite: 1.8s, 2964 in / 529 out
+[gen] gemini-3.5-flash-lite: 2.3s, 7860 in / 609 out
+[gen] gemini-3.5-flash-lite: 1.7s, 7028 in / 376 out
+[judge] gemini-3.5-flash-lite: 1.2s, 448 in / 138 out
+[judge] gemini-3.5-flash-lite: 1.0s, 436 in / 131 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2964 in / 217 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2964 in / 221 out
+[gen] gemini-3.5-flash-lite: 4.2s, 7899 in / 1445 out
+[judge] gemini-3.5-flash-lite: 1.1s, 450 in / 111 out
+[judge] gemini-3.5-flash-lite: 1.0s, 467 in / 129 out
+[judge] gemini-3.5-flash-lite: 1.2s, 562 in / 170 out
+[gen] gemini-3.5-flash-lite: 2.9s, 7054 in / 879 out
+[judge] gemini-3.5-flash-lite: 1.2s, 559 in / 140 out
+[judge] gemini-3.5-flash-lite: 1.2s, 504 in / 149 out
+[gen] gemini-3.5-flash-lite: 1.7s, 2977 in / 426 out
+[gen] gemini-3.5-flash-lite: 1.5s, 2977 in / 375 out
+[gen] gemini-3.5-flash-lite: 4.4s, 7890 in / 1594 out
+[judge] gemini-3.5-flash-lite: 1.3s, 638 in / 182 out
+[gen] gemini-3.5-flash-lite: 3.7s, 7058 in / 1263 out
+[judge] gemini-3.5-flash-lite: 1.2s, 616 in / 210 out
+[judge] gemini-3.5-flash-lite: 1.1s, 617 in / 141 out
+[judge] gemini-3.5-flash-lite: 0.9s, 586 in / 143 out
+[judge] gemini-3.5-flash-lite: 1.0s, 581 in / 151 out
+[gen] gemini-3.5-flash-lite: 1.5s, 2968 in / 265 out
+[judge] gemini-3.5-flash-lite: 1.0s, 537 in / 135 out
+[gen] gemini-3.5-flash-lite: 3.1s, 7886 in / 932 out
+[gen] gemini-3.5-flash-lite: 3.2s, 7886 in / 940 out
+[judge] gemini-3.5-flash-lite: 1.2s, 432 in / 83 out
+[judge] gemini-3.5-flash-lite: 1.0s, 426 in / 81 out
+[judge] gemini-3.5-flash-lite: 0.9s, 486 in / 92 out
+[gen] gemini-3.5-flash-lite: 2.2s, 7041 in / 632 out
+[judge] gemini-3.5-flash-lite: 1.4s, 497 in / 128 out
+[gen] gemini-3.5-flash-lite: 1.3s, 2964 in / 225 out
+[judge] gemini-3.5-flash-lite: 1.1s, 495 in / 117 out
+[gen] gemini-3.5-flash-lite: 1.3s, 7805 in / 62 out
+[judge] gemini-3.5-flash-lite: 1.0s, 7462 in / 92 out
+[judge] gemini-3.5-flash-lite: 0.9s, 6630 in / 27 out
+[judge] gemini-3.5-flash-lite: 0.9s, 2580 in / 27 out
+[gen] gemini-3.5-flash-lite: 1.6s, 4736 in / 287 out
+[judge] gemini-3.5-flash-lite: 0.9s, 400 in / 100 out
+[gen] gemini-3.5-flash-lite: 1.5s, 4785 in / 218 out
+[judge] gemini-3.5-flash-lite: 1.1s, 392 in / 114 out
+[gen] gemini-3.5-flash-lite: 1.9s, 8832 in / 473 out
+[judge] gemini-3.5-flash-lite: 1.1s, 386 in / 108 out
+[judge] gemini-3.5-flash-lite: 1.0s, 379 in / 76 out
+[gen] gemini-3.5-flash-lite: 1.5s, 4736 in / 294 out
+[gen] gemini-3.5-flash-lite: 1.4s, 4785 in / 232 out
+[judge] gemini-3.5-flash-lite: 1.2s, 389 in / 122 out
+[judge] gemini-3.5-flash-lite: 0.9s, 353 in / 74 out
+[gen] gemini-3.5-flash-lite: 2.2s, 8832 in / 546 out
+[judge] gemini-3.5-flash-lite: 1.0s, 395 in / 110 out
+[judge] gemini-3.5-flash-lite: 1.1s, 382 in / 83 out
+[judge] gemini-3.5-flash-lite: 1.0s, 409 in / 73 out
+[gen] gemini-3.5-flash-lite: 1.9s, 4736 in / 459 out
+[gen] gemini-3.5-flash-lite: 1.8s, 4785 in / 381 out
+[judge] gemini-3.5-flash-lite: 1.1s, 420 in / 98 out
+[judge] gemini-3.5-flash-lite: 1.2s, 481 in / 122 out
+[gen] gemini-3.5-flash-lite: 3.0s, 8832 in / 799 out
+[judge] gemini-3.5-flash-lite: 1.3s, 521 in / 123 out
+[judge] gemini-3.5-flash-lite: 1.2s, 522 in / 153 out
+[gen] gemini-3.5-flash-lite: 2.7s, 4753 in / 668 out
+[gen] gemini-3.5-flash-lite: 3.3s, 4802 in / 1108 out
+[judge] gemini-3.5-flash-lite: 1.3s, 698 in / 223 out
+[judge] gemini-3.5-flash-lite: 1.2s, 511 in / 153 out
+[gen] gemini-3.5-flash-lite: 5.0s, 8888 in / 2122 out
+[judge] gemini-3.5-flash-lite: 1.2s, 468 in / 127 out
+[judge] gemini-3.5-flash-lite: 1.1s, 493 in / 118 out
+[judge] gemini-3.5-flash-lite: 1.0s, 488 in / 88 out
+[judge] gemini-3.5-flash-lite: 1.0s, 454 in / 107 out
+[judge] gemini-3.5-flash-lite: 1.1s, 574 in / 153 out
+[judge] gemini-3.5-flash-lite: 1.0s, 531 in / 119 out
+[gen] gemini-3.5-flash-lite: 2.3s, 4749 in / 519 out
+[judge] gemini-3.5-flash-lite: 0.9s, 383 in / 85 out
+[judge] gemini-3.5-flash-lite: 0.9s, 402 in / 109 out
+[judge] gemini-3.5-flash-lite: 1.0s, 408 in / 97 out
+[gen] gemini-3.5-flash-lite: 2.0s, 4798 in / 544 out
+[judge] gemini-3.5-flash-lite: 1.0s, 418 in / 88 out
+[gen] gemini-3.5-flash-lite: 3.2s, 8871 in / 948 out
+[judge] gemini-3.5-flash-lite: 1.1s, 421 in / 119 out
+[judge] gemini-3.5-flash-lite: 0.9s, 354 in / 50 out
+[judge] gemini-3.5-flash-lite: 1.0s, 388 in / 88 out
+[judge] gemini-3.5-flash-lite: 0.8s, 370 in / 57 out
+[judge] gemini-3.5-flash-lite: 1.0s, 389 in / 92 out
+[judge] gemini-3.5-flash-lite: 0.9s, 363 in / 72 out
+[gen] gemini-3.5-flash-lite: 1.4s, 8764 in / 50 out
+[judge] gemini-3.5-flash-lite: 1.1s, 4331 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.0s, 4377 in / 27 out
+[judge] gemini-3.5-flash-lite: 1.1s, 8414 in / 54 out
+[generate] single:2:1cec7411: 39
+[gen] gemini-3.5-flash-lite: 1.7s, 23394 in / 216 out
+[judge] gemini-3.5-flash-lite: 1.0s, 366 in / 78 out
+[gen] gemini-3.5-flash-lite: 1.8s, 12943 in / 302 out
+[judge] gemini-3.5-flash-lite: 1.1s, 396 in / 98 out
+[gen] gemini-3.5-flash-lite: 1.8s, 23394 in / 239 out
+[judge] gemini-3.5-flash-lite: 0.9s, 361 in / 77 out
+[gen] gemini-3.5-flash-lite: 1.4s, 12930 in / 142 out
+[judge] gemini-3.5-flash-lite: 0.9s, 381 in / 79 out
+[gen] gemini-3.5-flash-lite: 2.3s, 23409 in / 592 out
+[judge] gemini-3.5-flash-lite: 1.0s, 392 in / 102 out
+[judge] gemini-3.5-flash-lite: 1.2s, 398 in / 101 out
+[gen] gemini-3.5-flash-lite: 2.3s, 12943 in / 505 out
+[judge] gemini-3.5-flash-lite: 1.3s, 598 in / 195 out
+[judge] gemini-3.5-flash-lite: 1.2s, 407 in / 101 out
+[gen] gemini-3.5-flash-lite: 3.7s, 23454 in / 1164 out
+[judge] gemini-3.5-flash-lite: 1.2s, 502 in / 163 out
+[gen] gemini-3.5-flash-lite: 4.5s, 12975 in / 1385 out
+[gen] gemini-3.5-flash-lite: 3.8s, 12975 in / 1088 out
+[judge] gemini-3.5-flash-lite: 1.6s, 522 in / 154 out
+[judge] gemini-3.5-flash-lite: 1.2s, 552 in / 162 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2975 in / 131 out
+[gen] gemini-3.5-flash-lite: 3.2s, 23409 in / 515 out
+[judge] gemini-3.5-flash-lite: 1.0s, 435 in / 115 out
+[judge] gemini-3.5-flash-lite: 0.8s, 349 in / 76 out
+[gen] gemini-3.5-flash-lite: 2.1s, 12943 in / 375 out
+[judge] gemini-3.5-flash-lite: 1.0s, 382 in / 102 out
+[gen] gemini-3.5-flash-lite: 1.3s, 7847 in / 200 out
+[judge] gemini-3.5-flash-lite: 1.0s, 461 in / 108 out
+[gen] gemini-3.5-flash-lite: 1.5s, 7015 in / 178 out
+[judge] gemini-3.5-flash-lite: 1.0s, 435 in / 123 out
+[gen] gemini-3.5-flash-lite: 1.6s, 2964 in / 326 out
+[gen] gemini-3.5-flash-lite: 1.4s, 7847 in / 167 out
+[judge] gemini-3.5-flash-lite: 1.1s, 427 in / 95 out
+[gen] gemini-3.5-flash-lite: 1.6s, 7015 in / 236 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2964 in / 176 out
+[gen] gemini-3.5-flash-lite: 4.2s, 7873 in / 1375 out
+[gen] gemini-3.5-flash-lite: 1.9s, 7028 in / 407 out
+[judge] gemini-3.5-flash-lite: 5.4s, 522 in / 150 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2964 in / 169 out
+[gen] gemini-3.5-flash-lite: 1.2s, 2964 in / 175 out
+[gen] gemini-3.5-flash-lite: 1.8s, 7851 in / 356 out
+[gen] gemini-3.5-flash-lite: 1.6s, 7019 in / 217 out
+[gen] gemini-3.5-flash-lite: 1.4s, 2968 in / 246 out
+[gen] gemini-3.5-flash-lite: 1.6s, 7847 in / 220 out
+[judge] gemini-3.5-flash-lite: 1.1s, 486 in / 122 out
+[gen] gemini-3.5-flash-lite: 1.5s, 7015 in / 207 out
+[judge] gemini-3.5-flash-lite: 1.0s, 489 in / 108 out
+[gen] gemini-3.5-flash-lite: 1.7s, 2964 in / 272 out
+[judge] gemini-3.5-flash-lite: 1.2s, 554 in / 168 out
+[gen] gemini-3.5-flash-lite: 1.3s, 4723 in / 138 out
+[judge] gemini-3.5-flash-lite: 1.1s, 391 in / 101 out
+[gen] gemini-3.5-flash-lite: 1.7s, 4772 in / 171 out
+[gen] gemini-3.5-flash-lite: 1.4s, 8806 in / 162 out
+[gen] gemini-3.5-flash-lite: 1.3s, 4772 in / 101 out
+[gen] gemini-3.5-flash-lite: 1.3s, 8806 in / 182 out
+[judge] gemini-3.5-flash-lite: 1.2s, 410 in / 148 out
+[gen] gemini-3.5-flash-lite: 1.3s, 4723 in / 249 out
+[gen] gemini-3.5-flash-lite: 1.4s, 4772 in / 192 out
+[judge] gemini-3.5-flash-lite: 1.1s, 437 in / 113 out
+[gen] gemini-3.5-flash-lite: 2.0s, 8819 in / 410 out
+[judge] gemini-3.5-flash-lite: 1.4s, 468 in / 224 out
+[gen] gemini-3.5-flash-lite: 1.8s, 4727 in / 311 out
+[gen] gemini-3.5-flash-lite: 1.3s, 4727 in / 132 out
+[gen] gemini-3.5-flash-lite: 1.6s, 4776 in / 205 out
+[gen] gemini-3.5-flash-lite: 4.6s, 8836 in / 1387 out
+[gen] gemini-3.5-flash-lite: 2.8s, 8836 in / 712 out
+[judge] gemini-3.5-flash-lite: 1.3s, 490 in / 120 out
+[judge] gemini-3.5-flash-lite: 1.1s, 516 in / 144 out
+[gen] gemini-3.5-flash-lite: 1.7s, 4772 in / 165 out
+[gen] gemini-3.5-flash-lite: 1.7s, 8806 in / 273 out
+[generate] follow:0:1cec7411: 9
+[gen] gemini-3.5-flash-lite: 8.5s, 25410 in / 3295 out
+[judge] gemini-3.5-flash-lite: 1.1s, 365 in / 76 out
+[judge] gemini-3.5-flash-lite: 0.9s, 382 in / 80 out
+[judge] gemini-3.5-flash-lite: 1.0s, 365 in / 83 out
+[judge] gemini-3.5-flash-lite: 1.0s, 413 in / 108 out
+[judge] gemini-3.5-flash-lite: 1.0s, 368 in / 80 out
+[judge] gemini-3.5-flash-lite: 1.0s, 358 in / 71 out
+[judge] gemini-3.5-flash-lite: 1.0s, 382 in / 98 out
+[judge] gemini-3.5-flash-lite: 1.0s, 372 in / 85 out
+[gen] gemini-3.5-flash-lite: 6.3s, 14854 in / 1956 out
+[gen] gemini-3.5-flash-lite: 2.2s, 4753 in / 642 out
+[judge] gemini-3.5-flash-lite: 2.2s, 434 in / 134 out
+[judge] gemini-3.5-flash-lite: 1.1s, 398 in / 98 out
+[gen] gemini-3.5-flash-lite: 7.4s, 10724 in / 2269 out
+[gen] gemini-3.5-flash-lite: 7.9s, 10724 in / 2863 out
+[judge] gemini-3.5-flash-lite: 1.6s, 492 in / 121 out
+[judge] gemini-3.5-flash-lite: 1.1s, 466 in / 107 out
+[judge] gemini-3.5-flash-lite: 1.1s, 439 in / 89 out
+[judge] gemini-3.5-flash-lite: 1.0s, 443 in / 93 out
+[judge] gemini-3.5-flash-lite: 1.0s, 456 in / 103 out
+[judge] gemini-3.5-flash-lite: 1.3s, 506 in / 174 out
+[judge] gemini-3.5-flash-lite: 1.2s, 490 in / 148 out
+[judge] gemini-3.5-flash-lite: 1.1s, 481 in / 85 out
+[gen] gemini-3.5-flash-lite: 10.8s, 9935 in / 3898 out
+[gen] gemini-3.5-flash-lite: 6.8s, 9935 in / 2405 out
+[judge] gemini-3.5-flash-lite: 1.2s, 438 in / 123 out
+[judge] gemini-3.5-flash-lite: 1.1s, 415 in / 121 out
+[judge] gemini-3.5-flash-lite: 1.1s, 428 in / 134 out
+[judge] gemini-3.5-flash-lite: 1.1s, 432 in / 105 out
+[gen] gemini-3.5-flash-lite: 3.2s, 5718 in / 893 out
+[judge] gemini-3.5-flash-lite: 1.2s, 547 in / 136 out
+[judge] gemini-3.5-flash-lite: 1.2s, 532 in / 139 out
+[gen] gemini-3.5-flash-lite: 4.1s, 6700 in / 1361 out
+[judge] gemini-3.5-flash-lite: 1.0s, 369 in / 76 out
+[judge] gemini-3.5-flash-lite: 0.9s, 432 in / 94 out
+[judge] gemini-3.5-flash-lite: 1.0s, 380 in / 101 out
+[judge] gemini-3.5-flash-lite: 1.0s, 393 in / 118 out
+[gen] gemini-3.5-flash-lite: 5.0s, 6758 in / 1969 out
+[judge] gemini-3.5-flash-lite: 1.1s, 403 in / 112 out
+[judge] gemini-3.5-flash-lite: 1.2s, 444 in / 81 out
+[judge] gemini-3.5-flash-lite: 1.1s, 486 in / 111 out
+[judge] gemini-3.5-flash-lite: 1.3s, 535 in / 189 out
+[gen] gemini-3.5-flash-lite: 13.0s, 10954 in / 4765 out
+[judge] gemini-3.5-flash-lite: 1.2s, 404 in / 105 out
+[judge] gemini-3.5-flash-lite: 1.4s, 371 in / 108 out
+[judge] gemini-3.5-flash-lite: 1.1s, 449 in / 78 out
+[judge] gemini-3.5-flash-lite: 1.2s, 408 in / 125 out
+[generate] follow:1:1cec7411: 8
+[gen] gemini-3.5-flash-lite: 6.0s, 25410 in / 2010 out
+[gen] gemini-3.5-flash-lite: 5.2s, 14854 in / 1613 out
+[judge] gemini-3.5-flash-lite: 1.4s, 495 in / 110 out
+[judge] gemini-3.5-flash-lite: 1.0s, 441 in / 72 out
+[judge] gemini-3.5-flash-lite: 0.9s, 380 in / 69 out
+[judge] gemini-3.5-flash-lite: 0.9s, 397 in / 63 out
+[gen] gemini-3.5-flash-lite: 5.5s, 10724 in / 1983 out
+[gen] gemini-3.5-flash-lite: 4.6s, 10724 in / 1730 out
+[judge] gemini-3.5-flash-lite: 1.6s, 469 in / 129 out
+[gen] gemini-3.5-flash-lite: 5.3s, 9935 in / 1842 out
+[judge] gemini-3.5-flash-lite: 1.4s, 598 in / 219 out
+[judge] gemini-3.5-flash-lite: 1.1s, 473 in / 150 out
+[judge] gemini-3.5-flash-lite: 1.4s, 446 in / 147 out
+[judge] gemini-3.5-flash-lite: 1.2s, 484 in / 159 out
+[gen] gemini-3.5-flash-lite: 2.4s, 5712 in / 532 out
+[gen] gemini-3.5-flash-lite: 2.6s, 6700 in / 683 out
+[judge] gemini-3.5-flash-lite: 2.4s, 389 in / 102 out
+[gen] gemini-3.5-flash-lite: 4.1s, 6758 in / 1146 out
+[judge] gemini-3.5-flash-lite: 1.3s, 398 in / 100 out
+[judge] gemini-3.5-flash-lite: 1.4s, 414 in / 142 out
+[judge] gemini-3.5-flash-lite: 1.1s, 406 in / 109 out
+[judge] gemini-3.5-flash-lite: 1.4s, 427 in / 133 out
+[gen] gemini-3.5-flash-lite: 5.7s, 10954 in / 1804 out
+[judge] gemini-3.5-flash-lite: 1.4s, 459 in / 136 out
+[judge] gemini-3.5-flash-lite: 1.3s, 421 in / 118 out
+[judge] gemini-3.5-flash-lite: 1.4s, 384 in / 104 out
+[judge] gemini-3.5-flash-lite: 1.2s, 403 in / 98 out
+dataset: 20261014-030709
+Text from your documents will be sent to: api.gateway.chula-ai.com
+[generate] ingest: 1
+[generate] single:0:1cec7411: 54
+[generate] single:1:1cec7411: 48
+[generate] single:2:1cec7411: 39
+[generate] follow:0:1cec7411: 9
+[generate] follow:1:1cec7411: 8
+dataset: 20261014-030709

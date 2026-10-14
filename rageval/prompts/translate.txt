@@ -3,7 +3,7 @@ Task: translate
 Translate the items below into the language with ISO 639-1 code "$lang".
 
 Rules:
-- Translate "question", "resolved_question" and every entry of "gold_ans". Keep the same number of entries in "gold_ans", in the same order.
+- Translate "question", "resolved_question", "reference_answer" and every entry of "gold_ans". Keep the same number of entries in "gold_ans", in the same order.
 - Keep the meaning exact: names, numbers and qualifiers must stay intact ("at least 2.75" must not become "more than 2.75").
 - If "question" and "resolved_question" are identical in the input, they must be identical in the output.
 - A key point is one statement that can be judged true or false on its own; do not merge or split key points.
@@ -13,4 +13,4 @@ Items:
 $items
 
 Return JSON only, in exactly this shape:
-{"items": [{"id": "law-0003", "question": "...", "resolved_question": "...", "gold_ans": ["..."]}]}
+{"items": [{"id": "law-003-en", "question": "...", "resolved_question": "...", "reference_answer": "...", "gold_ans": ["..."]}]}

@@ -1,0 +1,22 @@
+Task: answer
+
+Write the reference answer for the question below, using only the evidence quotes. The quotes may be in a different language; write the answer in English. Do not use your own knowledge.
+
+Question:
+$question
+
+Question rewritten so that it can be understood on its own:
+$resolved_question
+
+Evidence quotes:
+$quotes
+
+Definitions:
+- Required fact: One statement that can be judged true or false on its own. "TCP is connection-oriented" is one; "TCP is connection-oriented and reliable" is two.
+
+Rules:
+- "required_facts" has one to four required facts. Together they are everything a correct answer must say, and nothing the quotes do not support.
+- "reference_answer" is a short answer in plain sentences that states all the required facts.
+
+Return JSON only, in exactly this shape:
+{"reference_answer": "...", "required_facts": ["fact"]}
