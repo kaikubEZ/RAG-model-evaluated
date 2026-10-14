@@ -7,7 +7,7 @@ from string import Template
 from typing import TypeVar
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from . import store
 

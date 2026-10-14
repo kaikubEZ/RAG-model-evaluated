@@ -2,6 +2,7 @@
 import json
 import math
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -18,6 +19,7 @@ class Settings(BaseModel):
     overgenerate: float = Field(1.3, ge=1.0, le=5.0)
     extra_langs: list[str] = []
     generation_guidance: str = ""
+    scope: Literal["current", "published"] = "current"  # CHAT is_deployed_key: current=false, published=true
     top_k: int = Field(5, ge=1)
     rag_adapter: str = "http_json"
     supports_history: bool = False

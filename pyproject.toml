@@ -21,10 +21,11 @@ dependencies = [
 test = ["pytest", "pypdfium2"]
 
 [project.scripts]
-rageval = "rageval.cli:main"
+rageval-datagen = "rageval.datagen.cli:main"
+rageval-eval = "rageval.evaluation.cli:main"
 
 [tool.setuptools]
-packages = ["rageval"]
+packages = ["rageval", "rageval.datagen", "rageval.evaluation"]
 
 [tool.setuptools.package-data]
 rageval = ["prompts/*.txt"]

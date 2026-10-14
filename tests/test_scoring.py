@@ -5,7 +5,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from rageval import adapters, judge, jobs, labels, llm, metrics, report, run as run_mod, score, settings, stats, store
+from rageval import csvio, judge, jobs, llm, settings, store
+from rageval.evaluation import adapters, dataset, labels, metrics, report, run as run_mod, score, stats
 from rageval.schema import Answer, Context, Evidence, KeyPoint, Question, Score
 
 EN = "abcdefghijklmnopqrstuvwxyz"
@@ -33,8 +34,9 @@ def mk(id, *, follow=None, answerable=True, quotes=(), gold=("g",), lang="en", s
 
 def freeze(root, qs, did="ds"):
     d = root / "datasets" / did
-    store.write_jsonl(d / "questions.jsonl", qs)
-    store.write_json(d / "manifest.json", {"dataset_id": did, "sha256": store.sha256(d / "questions.jsonl")})
+    by_id = {q.id: q for q in qs}
+    csvio.write(d / "dataset.csv", [csvio.to_row(q, by_id, scope="current", corpus_version="v1", source_hashes={}) for q in qs])
+    store.write_json(d / "manifest.json", {"dataset_id": did, "csv_sha256": dataset.sha(did)})
     return did
 
 
@@ -42,7 +44,7 @@ def make_run(root, run_id, did, qs, scores, sha=None, top_k=5, answers=()):
     """Write a run directory with scores (and answers) directly."""
     rd = root / "runs" / run_id
     store.write_json(rd / "manifest.json", {
-        "run_id": run_id, "dataset_id": did, "dataset_sha256": sha or store.read_json(root / "datasets" / did / "manifest.json")["sha256"], "settings": settings.Settings().model_dump(),
+        "run_id": run_id, "dataset_id": did, "dataset_sha256": sha or dataset.sha(did), "settings": settings.Settings().model_dump(),
         "rag_url": "", "adapter": "fake", "label": "", "top_k": top_k, "matcher": {"window": 20, "coverage": 0.8},
         "seed": 0, "started": "now"})
     store.write_jsonl(rd / "scores.jsonl", list(scores))
@@ -290,7 +292,7 @@ def test_http_json_sends_history_for_follow_up(root, server):
     got = run_mod.latest_answers(rid)
     assert got["s1"].contexts == [Context(text="c")] and got["f1"].error is None
     m = store.read_json(root / "runs" / rid / "manifest.json")
-    assert m["dataset_id"] == did and m["dataset_sha256"] == store.sha256(root / "datasets" / did / "questions.jsonl") and m["matcher"] == {"window": 20, "coverage": 0.8}
+    assert m["dataset_id"] == did and m["dataset_sha256"] == dataset.sha(did) and m["matcher"] == {"window": 20, "coverage": 0.8}
     assert m["label"] == "x" and m["rag_url"].startswith("http://127.0.0.1") and m["top_k"] == 5
 
 
@@ -330,7 +332,7 @@ def test_ten_consecutive_errors_stop(root, server):
 
 
 def test_run_requires_frozen_dataset(root):
-    with pytest.raises(SystemExit, match="not frozen"):
+    with pytest.raises(SystemExit, match="dataset.csv"):
         run_mod.run("missing")
     with pytest.raises(SystemExit, match="no run"):
         run_mod.run(run_id="missing")
@@ -763,7 +765,7 @@ def test_reference_reads_pdf_with_pdfium(root, monkeypatch):
 # ---- review fixes ----
 
 def test_errored_question_does_not_turn_an_unmeasured_metric_into_zero():
-    from rageval import stats
+    from rageval.evaluation import stats
     from rageval.schema import Evidence, Question, Score
     def q(i):
         return Question(id=f"s-{i}", base_id=f"s-{i}", subject="s", lang="en", source_lang="en", question="q",
@@ -1011,7 +1013,7 @@ def test_changed_questions_file_is_refused_by_run_and_score(root, monkeypatch, f
     did = freeze(root, [mk("s1"), mk("s2")])
     rid = run_mod.run(did)
     score.run(rid)
-    path = root / "datasets" / did / "questions.jsonl"
+    path = root / "datasets" / did / "dataset.csv"
     path.write_text(path.read_text(encoding="utf-8").replace("question s2", "question edited"), encoding="utf-8")
     with pytest.raises(SystemExit, match="hash mismatch"):
         run_mod.run(did)
@@ -1022,11 +1024,11 @@ def test_changed_questions_file_is_refused_by_run_and_score(root, monkeypatch, f
 
 
 def test_dataset_written_by_freeze_passes_the_hash_check(root, monkeypatch, fake):
-    from rageval import freeze as freeze_mod
+    from rageval.datagen import freeze as freeze_mod
     ds = root / "datasets" / "ds0"
     store.write_jsonl(ds / "candidates.jsonl", [mk("a", gold=("alpha",), quotes=[QA]), mk("u", answerable=False)])
     frozen = freeze_mod.run("ds0")
-    assert frozen["sha256"] == store.sha256(ds / "questions.jsonl")
+    assert frozen["sha256"] == store.sha256(ds / "questions.jsonl") and frozen["csv_sha256"] == dataset.sha("ds0")
     set_settings(rag_adapter="fake")
     monkeypatch.setattr(adapters, "get", lambda name: Recorder())
     rid = run_mod.run("ds0")
@@ -1042,3 +1044,31 @@ def test_difficulty_breakdown_has_no_none_cell(root, fake):
     cells = report.summary("r")["breakdowns"]["difficulty"]
     assert set(cells) == {"easy", "unanswerable (no difficulty)"} and cells["unanswerable (no difficulty)"]["n"] == 20
     assert "None" not in report.write("r").read_text(encoding="utf-8")
+
+
+def test_csv_round_trip_keeps_every_field_the_scorer_uses(root):
+    qs = [mk("a", gold=("alpha", "beta"), quotes=[QA, QB], closed_book=True),
+          mk("a.th", lang="th", gold=("alpha",), quotes=[QA]),
+          mk("f", follow="a", scenario="same"), mk("u", answerable=False)]
+    did = freeze(root, qs)
+    again = dataset.load(did)
+    assert [q.model_dump() for q in again] == [q.model_dump() for q in qs]
+    with (root / "datasets" / did / "dataset.csv").open(encoding="utf-8", newline="") as f:
+        header = f.readline().strip().split(",")
+    assert header == csvio.COLUMNS
+
+
+def test_csv_with_commas_quotes_newlines_and_thai(root):
+    text = 'ข้อ 1, "quoted"' + chr(10) + 'line two'
+    q = mk("t", lang="th", source="th", gold=(text,), quotes=[QA]).model_copy(
+        update={"question": 'ถาม, "อะไร"?' + chr(10) + 'บรรทัดสอง'})
+    did = freeze(root, [q])
+    assert dataset.load(did)[0].question == q.question and dataset.load(did)[0].gold_ans == q.gold_ans
+
+
+def test_csv_missing_required_column_is_refused(root):
+    p = root / "datasets" / "bad" / "dataset.csv"
+    p.parent.mkdir(parents=True)
+    p.write_text("case_id,question" + chr(10) + "q1,hello" + chr(10), encoding="utf-8")
+    with pytest.raises(SystemExit, match="course_id, scope"):
+        dataset.load("bad")

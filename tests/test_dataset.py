@@ -8,7 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 import rageval
-from rageval import freeze, generate, ingest, jobs, llm, settings, store, text, translate, validate
+from rageval import jobs, llm, settings, store, text
+from rageval.datagen import freeze, generate, ingest, translate, validate
 from rageval.schema import Evidence, Page, Question
 
 EN = "abcdefghijklmnopqrstuvwxyz"
@@ -639,7 +640,7 @@ def test_duplicate_as_draft(root, fake, fake_judge):
 
 def test_generate_plans_again_when_a_subject_is_added(root, monkeypatch):
     """A plan made for one set of documents must not hide documents added to the dataset later."""
-    from rageval import generate
+    from rageval.datagen import generate
     calls = []
     monkeypatch.setattr(generate, "_batch_single", lambda st, key, subject, *a: (calls.append(subject), generate._commit(st, key, [])))
     monkeypatch.setattr(generate, "_batch_follow", lambda st, key, subject, *a: generate._commit(st, key, []))

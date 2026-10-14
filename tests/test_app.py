@@ -6,12 +6,16 @@ import pytest
 from streamlit.proto.TextInput_pb2 import TextInput
 from streamlit.testing.v1 import AppTest
 
-from rageval import material, review, settings, store
+from rageval import csvio, settings, store
+from rageval.evaluation import dataset
+from rageval.datagen import material, review
 from rageval.schema import Answer, Evidence, Page, Question, Score
 
 EN = "abcdefghijklmnopqrstuvwxyz"
-APP = str(Path(__file__).resolve().parent.parent / "rageval" / "app.py")
-PAGES = ["Setup", "Material", "Generate", "Review", "Run and score", "Results", "Compare", "Labelling"]
+ROOT_DIR = Path(__file__).resolve().parent.parent / "rageval"
+APPS = {"datagen": ROOT_DIR / "datagen" / "app.py", "evaluation": ROOT_DIR / "evaluation" / "app.py"}
+PAGES = [("datagen", n) for n in ("Setup", "Material", "Generate", "Review")] + [
+    ("evaluation", n) for n in ("Setup", "Run and score", "Results", "Compare", "Labelling")]
 ENV_KEYS = ["GEN_AI_API_KEY", "GEN_AI_URL", "GEN_AI_MODEL", "JUDGE_AI_API_KEY", "JUDGE_AI_URL", "JUDGE_AI_MODEL",
             "RAG_API_KEY", "RAG_URL"]
 
@@ -53,6 +57,8 @@ def make_dataset(frozen=False, ds="20260101-000000", rows=None):
     rows = rows if rows is not None else [question(1, 1), question(2, 2)]
     store.write_jsonl(d / ("questions.jsonl" if frozen else "candidates.jsonl"), rows)
     if frozen:
+        by_id = {q.id: q for q in rows}
+        csvio.write(d / "dataset.csv", [csvio.to_row(q, by_id, scope="current", corpus_version="v1", source_hashes={}) for q in rows])
         store.write_json(d / "manifest.json", {"dataset_id": ds, "sha256": "abc123"})
     return ds
 
@@ -60,10 +66,10 @@ def make_dataset(frozen=False, ds="20260101-000000", rows=None):
 def make_run(ds, run_id="20260102-000000-first"):
     rd = store.runs_dir() / run_id
     store.write_json(rd / "manifest.json", {
-        "run_id": run_id, "dataset_id": ds, "dataset_sha256": "abc123", "settings": settings.Settings().model_dump(),
+        "run_id": run_id, "dataset_id": ds, "dataset_sha256": dataset.sha(ds), "settings": settings.Settings().model_dump(),
         "rag_url": "", "adapter": "http_json", "label": "first", "top_k": 5, "matcher": {"window": 20, "coverage": 0.8},
         "seed": 0, "started": "2026-01-02T00:00:00+00:00"})
-    qs = store.read_jsonl(store.datasets_dir() / ds / "questions.jsonl", Question)
+    qs = dataset.load(ds)
     store.write_jsonl(rd / "answers.jsonl", [Answer(id=q.id, answer="an answer", contexts=[{"text": quote(1)}]) for q in qs])
     store.write_jsonl(rd / "scores.jsonl", [
         Score(id=q.id, base_id=q.base_id, recall_at_k=1.0, reciprocal_rank=1.0, context_count=1, context_chars=150,
@@ -248,8 +254,9 @@ def test_summary_counts_and_shortfall(root):
 
 # ---------------------------------------------------------------- app
 
-def page(name, **session):
-    at = AppTest.from_file(APP, default_timeout=60)
+def page(name, app=None, **session):
+    app = app or ("evaluation" if name in ("Run and score", "Results", "Compare", "Labelling") else "datagen")
+    at = AppTest.from_file(str(APPS[app]), default_timeout=60)
     at.session_state["page"] = name
     for k, v in session.items():
         at.session_state[k] = v
@@ -270,10 +277,10 @@ def state(root, kind):
 
 
 @pytest.mark.parametrize("kind", ["empty", "draft", "frozen", "scored"])
-@pytest.mark.parametrize("name", PAGES)
-def test_every_page_renders(root, kind, name):
+@pytest.mark.parametrize("app,name", PAGES)
+def test_every_page_renders(root, kind, app, name):
     state(root, kind)
-    at = page(name)
+    at = page(name, app)
     assert not at.exception, [e.value for e in at.exception]
     assert not at.error, [e.value for e in at.error]
 
@@ -281,7 +288,7 @@ def test_every_page_renders(root, kind, name):
 def test_empty_project_says_what_to_do_next(root):
     assert "Create one above" in page("Material").info[0].value
     assert "Generate page" in page("Review").info[0].value
-    assert "No frozen dataset" in page("Run and score").info[0].value
+    assert "No dataset.csv" in page("Run and score").info[0].value
     assert "No scored run" in page("Results").info[0].value
 
 

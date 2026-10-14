@@ -17,7 +17,7 @@ TIMEOUT_SECONDS = 60
 MAX_CHARS = 20_000  # per answer and per context
 MAX_CONTEXTS = 50
 MAX_BODY = 8_000_000  # bytes read from one reply
-REFERENCE = Path(__file__).resolve().parent.parent / "tests" / "reference_rag.py"
+REFERENCE = Path(__file__).resolve().parent.parent.parent / "tests" / "reference_rag.py"
 
 
 class Permanent(Exception):

@@ -67,7 +67,7 @@ def run(dataset_id: str | None = None, label: str = "", run_id: str | None = Non
         s, run_id, manifest = settings.load(), store.new_id(label), None
     if not dataset.exists(dataset_id):
         raise SystemExit(f"There is no datasets/{dataset_id}/dataset.csv. Export one with `rageval-datagen freeze`.")
-    dataset_sha = dataset.sha(dataset_id)
+    dataset_sha = dataset.expected_sha(dataset_id)
     check_dataset(dataset_id, manifest["dataset_sha256"] if manifest else dataset_sha)
     questions = dataset.load(dataset_id)
     by_id = {q.id: q for q in questions}

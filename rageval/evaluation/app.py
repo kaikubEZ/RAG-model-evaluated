@@ -5,8 +5,8 @@ import streamlit as st
 from rageval import jobs, llm, settings, store
 from rageval.evaluation import adapters, dataset, labels, report, stats
 from rageval.evaluation import run as run_mod
-from rageval.schema import SCENARIOS, Score
-from rageval.ui import (STOP_NOTE, attempt, env_form, job_status, newest_run, privacy, purge, run_app, ss, start_job,
+from rageval.schema import Score
+from rageval.ui import (STOP_NOTE, attempt, env_form, job_status, newest_run, privacy, run_app, ss, start_job,
                         test)
 
 MODULE = "rageval.evaluation.cli"

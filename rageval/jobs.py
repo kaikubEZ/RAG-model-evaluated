@@ -115,13 +115,13 @@ class Job:
         self.check_stop()
 
 
-def start_detached(args: list[str]) -> None:
-    """Start `python -m rageval.cli <args>` so that it outlives the app page that launched it."""
+def start_detached(module: str, args: list[str]) -> None:
+    """Start `python -m <module> <args>` so that it outlives the app page that launched it."""
     kwargs: dict = {}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         kwargs["start_new_session"] = True
     log = (store.ROOT / "rageval-job.log").open("a", encoding="utf-8")
-    subprocess.Popen([sys.executable, "-m", "rageval.cli", *args], cwd=store.ROOT, stdout=log, stderr=log,
+    subprocess.Popen([sys.executable, "-m", module, *args], cwd=store.ROOT, stdout=log, stderr=log,
                      stdin=subprocess.DEVNULL, **kwargs)

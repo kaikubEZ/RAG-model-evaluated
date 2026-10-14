@@ -6,7 +6,7 @@ from pathlib import Path
 from . import dataset, metrics, run as run_mod, stats
 from .. import llm, store, text
 from ..judge import append_json_line as _append, read_json_lines as _read
-from ..schema import Question, Score
+from ..schema import Score
 
 # decision type -> (judge call whose prompt it belongs to, allowed verdict values)
 TYPES = {
