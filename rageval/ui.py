@@ -9,8 +9,16 @@ import streamlit as st
 from rageval import jobs, llm, settings, store
 
 ss = st.session_state
-STOP_NOTE = ("Closing this tab does not stop a job. Press Stop to stop it. After a stop or a crash, press Start again "
-             "and it continues where it stopped.")
+STOP_NOTE = "Closing this tab does not stop the job. Press Stop to stop it; starting again continues where it left off."
+ROLE_NAMES = {"gen": "writing model", "judge": "checking model"}
+KEY_HELP = {"GEN_AI_API_KEY": "Secret key of the model that writes the questions and answers.",
+            "GEN_AI_URL": "Address of any OpenAI-compatible API, for example https://api.openai.com/v1.",
+            "GEN_AI_MODEL": "Model name, for example gpt-4o-mini.",
+            "JUDGE_AI_API_KEY": "Secret key of the model that checks questions and scores answers.",
+            "JUDGE_AI_URL": "Address of the checking model's API.",
+            "JUDGE_AI_MODEL": "Name of the checking model.",
+            "RAG_API_KEY": "Key your RAG endpoint needs, if any.",
+            "RAG_URL": "Address of the RAG endpoint you want to evaluate."}
 
 
 def attempt(fn, *args, **kwargs):
@@ -53,7 +61,7 @@ def job_status(target: str) -> None:
     else:
         d = Path(target)
     if d is None:
-        st.caption("Nothing has run yet.")
+        st.caption("No job has run yet.")
         return
     running = jobs.is_running(d)
     if ss.setdefault(f"was_running|{d}", running) != running:
@@ -63,37 +71,42 @@ def job_status(target: str) -> None:
     if not p:
         st.caption(f"No job has run in {d.name} yet.")
         return
-    label = f"{d.name}: {p['job']}, {p['step']} {p['done']}/{p['total']}"
+    label = f"{p['job']}: {p['step']} {p['done']}/{p['total']}"
     st.progress(min(p["done"] / p["total"], 1.0) if p["total"] else 0.0, text=f"{label} {p['message']}".strip())
     used = jobs.usage(d)
     if used:
         cols = st.columns(len(used) * 3)
         for i, (role, u) in enumerate(sorted(used.items())):
-            cols[3 * i].metric(f"{role} calls", f"{u['calls']:,}")
-            cols[3 * i + 1].metric(f"{role} tokens in", f"{u['prompt']:,}")
-            cols[3 * i + 2].metric(f"{role} tokens out", f"{u['completion']:,}")
-    with st.expander("Log (last 200 lines)"):
+            who = ROLE_NAMES.get(role, role)
+            cols[3 * i].metric(f"{who}: requests", f"{u['calls']:,}")
+            cols[3 * i + 1].metric(f"{who}: tokens read", f"{u['prompt']:,}")
+            cols[3 * i + 2].metric(f"{who}: tokens written", f"{u['completion']:,}")
+    with st.expander("Technical log (last 200 lines)"):
         st.code(jobs.log_tail() or "(empty)", language=None)
     if p["message"].startswith("failed"):
-        st.error(f"{p['message']}. Details are in {store.ROOT / 'rageval-job.log'}.")
-    if running and st.button("Stop", key=f"stop|{d}"):
-        jobs.request_stop(d)
-        st.info("Stop requested. The job stops after the call in hand.")
+        st.error(f"The job failed: {p['message']}. Check the settings on the Setup page, then press Start again. "
+                 f"Technical details are in {store.ROOT / 'rageval-job.log'}.")
+    if running:
+        st.caption(STOP_NOTE)
+        if st.button("Stop", key=f"stop|{d}"):
+            jobs.request_stop(d)
+            st.info("Stop requested. The job stops after the request it is working on.")
 
 def start_job(module: str, args: list[str]) -> None:
     ok, _ = attempt(jobs.start_detached, module, args)
     if ok:
-        flash("success", f"Started {module} {' '.join(args)}. {STOP_NOTE}")
+        flash("success", "Job started. Progress is shown on this page.")
         st.rerun()
 
 def privacy(key: str, roles: tuple[str, ...] = ("gen", "judge")) -> bool:
-    """Say where document text goes (PRD section 9); the tick must be set before a model job can start."""
+    """Say where document text goes (PRD section 9); the tick must be set before a model job can start.
+    Returns whether it is ticked; callers show `NEED_TICK` while it is not."""
     try:
         hosts = sorted({urlparse(llm.config(r)["url"]).netloc for r in roles})
     except SystemExit as e:
-        st.warning(f"{e} Nothing can be sent until the model settings are saved.")
+        st.warning(f"{e} Save the model settings on the Setup page first.")
         return False
-    return st.checkbox(f"I understand that text from my documents will be sent to: {', '.join(hosts)}", key=key)
+    return st.checkbox(f"I agree that text from my documents is sent to: {', '.join(hosts)}", key=key)
 
 
 # ---------------------------------------------------------------- Setup
@@ -101,7 +114,7 @@ def privacy(key: str, roles: tuple[str, ...] = ("gen", "judge")) -> bool:
 def test(call) -> None:
     try:
         call()
-        st.success("Connected.")
+        st.success("Connected. The settings work.")
     except (SystemExit, Exception) as e:  # any failure of a connection test is the answer being asked for
         st.error(str(e) or type(e).__name__)
 
@@ -111,15 +124,16 @@ def env_form(keys: list[tuple[str, bool]], extra=None) -> None:
     env_path = store.ROOT / ".env"
     current = dotenv.dotenv_values(env_path) if env_path.exists() else {}
     s = settings.load()
-    st.caption("Keys are saved to .env in the project folder. A blank key box keeps the saved key.")
+    st.caption("Saved in the .env file in the project folder. Leave a key box empty to keep the saved key.")
     with st.form("setup"):
         values = {}
         for key, secret in keys:
             if secret:
-                values[key] = st.text_input(key, type="password", placeholder="saved" if current.get(key) else "not set")
+                values[key] = st.text_input(key, type="password", placeholder="saved" if current.get(key) else "not set", help=KEY_HELP.get(key))
             else:
-                values[key] = st.text_input(key, value=current.get(key) or "")
-        st.caption("Blank JUDGE_AI values fall back to the GEN_AI values.")
+                values[key] = st.text_input(key, value=current.get(key) or "", help=KEY_HELP.get(key))
+        if any(k.startswith("GEN_") for k, _ in keys):
+            st.caption("Leave the JUDGE_AI boxes empty to use the same model as GEN_AI.")
         changes = extra(s) if extra else {}
         saved = st.form_submit_button("Save")
     if saved:
@@ -132,6 +146,17 @@ def env_form(keys: list[tuple[str, bool]], extra=None) -> None:
             settings.save(settings.Settings.model_validate({**s.model_dump(), **changes}))
         if attempt(save)[0]:
             st.success("Saved.")
+
+
+NEED_TICK = "Tick the box above to continue."
+
+
+def why_disabled(*reasons: tuple[bool, str]) -> None:
+    """Say under a greyed-out button why it is greyed out (the first reason that applies)."""
+    for applies, text in reasons:
+        if applies:
+            st.caption(text)
+            return
 
 
 def next_step(name: str) -> None:

@@ -6,37 +6,39 @@ import streamlit as st
 from rageval import csvio, jobs, llm, settings, store
 from rageval.datagen import answer, freeze, material, review, translate
 from rageval.schema import QUESTION_TYPES, SCENARIOS, Question
-from rageval.ui import (STOP_NOTE, attempt, env_form, flash, job_status, next_step, privacy, purge, ss, start_job,
-                        test)
+from rageval.ui import (NEED_TICK, attempt, env_form, flash, job_status, next_step, privacy, purge, ss, start_job,
+                        test, why_disabled)
 
 MODULE = "rageval.datagen.cli"
 ENV_KEYS = [("GEN_AI_API_KEY", True), ("GEN_AI_URL", False), ("GEN_AI_MODEL", False),
             ("JUDGE_AI_API_KEY", True), ("JUDGE_AI_URL", False), ("JUDGE_AI_MODEL", False)]
 SCOPES = ["current", "published"]
 NEW_DATASET = "New dataset"
+TABLE_COLUMNS = ("case_id", "question", "answerability", "reference_answer", "language")  # the rest hides behind a toggle
 
 
 # ---------------------------------------------------------------- 1. Setup
 
 def setup_page() -> None:
-    step_intro(1, "Tell the program which AI model writes the questions. You only do this once.")
+    step_intro(1, "Choose the AI model that writes the questions. You only do this once.")
     env_form(ENV_KEYS, lambda s: {"scope": st.selectbox(
-        "AI-TUTOR scope of the questions (current = not deployed, published = deployed)", SCOPES,
+        "Which AI-TUTOR content the questions are for (current = not deployed yet, published = deployed)", SCOPES,
         index=SCOPES.index(s.scope))})
     st.subheader("Test connection")
-    st.caption("Each test sends one tiny request.")
+    st.caption("Each test sends one tiny request to check that the settings work.")
     for name, role in (("generator", "gen"), ("judge", "judge")):
-        if st.button(f"Test {name}", key=f"test_{role}"):
+        if st.button(f"Test the {name} model", key=f"test_{role}"):
             test(lambda r=role: llm.call(r, "Reply with the word ok."))
+    next_step(STEPS[1])
 
 
 # ---------------------------------------------------------------- 2. Material
 
 def material_page() -> None:
-    step_intro(2, "Add the course documents the questions will be written from (PDF with a text layer, .txt or .md).")
+    step_intro(2, "Add the course documents the questions come from (PDF with selectable text, .txt or .md).")
     if (host := material.synced_folder()):
-        st.warning(f"This project folder is inside {host}. The {host} client uploads material/ to the cloud "
-                   "regardless of .gitignore. Keep private documents in a folder that is not synced.")
+        st.warning(f"This project folder is inside {host}, which uploads the material/ folder to the cloud. "
+                   "Keep private documents in a folder that is not synced.")
     with st.form("new_subject", clear_on_submit=True):
         name = st.text_input("New subject")
         if st.form_submit_button("Create subject") and attempt(material.add_subject, name)[0]:
@@ -45,7 +47,7 @@ def material_page() -> None:
     if not ok:
         return
     if not subjects:
-        st.info("No subjects yet. Create one above (for example the name of a topic), then upload its documents.")
+        st.info("No subjects yet. Create one above (for example a course or topic name), then upload its documents.")
     for sub in subjects:
         with st.expander(sub["name"], expanded=True):
             if sub["files"]:
@@ -55,9 +57,9 @@ def material_page() -> None:
                     if f["error"]:
                         st.error(f["error"])
                     elif not f["fits"]:
-                        st.warning(f"{f['name']} is too large for the generator. Split it, or raise the largest document size under Targets and options in step 3.")
+                        st.warning(f"{f['name']} is too large for the writing model. Split it into smaller files, or raise the largest document size under options in step 3.")
             else:
-                st.caption("No files yet.")
+                st.caption("No files yet. Upload some below.")
             files = st.file_uploader("Upload files (.pdf, .txt, .md)", accept_multiple_files=True, key=f"up|{sub['name']}")
             if files and st.button("Save uploaded files", key=f"save|{sub['name']}"):
                 done = [f.name for f in files if attempt(material.save_upload, sub["name"], f.name, f.getvalue())[0]]
@@ -69,6 +71,7 @@ def material_page() -> None:
                 sure = st.checkbox(f"Yes, delete {gone}", key=f"sure|{sub['name']}")
                 if st.button("Delete file", key=f"delbtn|{sub['name']}", disabled=not sure) and attempt(material.delete_file, sub["name"], gone)[0]:
                     st.rerun()
+    next_step(STEPS[2])
 
 # ---------------------------------------------------------------- shared pieces of the numbered steps
 
@@ -129,9 +132,9 @@ def open_dataset(allow_new: bool = False):
     d = store.datasets_dir() / ds
     readonly = store.is_frozen(ds) or jobs.is_running(d)
     if store.is_frozen(ds):
-        st.info("This dataset is frozen, so it is read-only. Use Duplicate as draft on step 6 to change it.")
+        st.info("This dataset is finished and locked. To change it, use \"Copy as a new draft\" in step 6.")
     elif jobs.is_running(d):
-        st.info("A job is running on this dataset, so the page is read-only until it finishes.")
+        st.info("A job is running on this dataset. You can read it, but not edit it, until the job ends.")
     ok, rows = attempt(review.load, ds)
     if not ok:
         return None, None, None, True
@@ -145,11 +148,15 @@ def show_table(ds: str, shown: list[Question], key: str) -> str | None:
     table["review status"] = [r.status for r in shown]
     table["answer status"] = [r.answer_status if r.answerable else "n/a" for r in shown]
     table["check failed"] = [r.note or "" for r in shown]
+    full = st.toggle("Show all columns", key=f"cols|{key}", help="The full dataset.csv columns, including the technical JSON ones.")
     # text cannot wrap in a table, so each long column is as wide as its longest cell and the table scrolls sideways
     wide = {c: st.column_config.TextColumn(width=int(min(max(table[c].str.len().max() * 7 + 24, 120), 3000)))
             for c in ("question", "reference_answer", "required_facts_json", "evidence_json", "provenance_json",
                       "history_json", "check failed") if len(table)}
     wide["case_id"] = st.column_config.TextColumn(pinned=True)
+    if not full:
+        wide = {c: v for c, v in wide.items() if c in TABLE_COLUMNS}
+        wide.update({c: None for c in csvio.COLUMNS if c not in TABLE_COLUMNS})
     event = st.dataframe(table, hide_index=True, on_select="rerun", selection_mode="single-row", key=f"table|{ds}|{key}",
                          width="stretch", column_config=wide)
     chosen = [shown[i].id for i in event.selection.rows if i < len(shown)]
@@ -173,7 +180,7 @@ def edit_selected(ds: str, sel: str | None, rows: list[Question], readonly: bool
         ss["rv_new"] = True
     q0 = None if ss.get("rv_new") else by_id.get(sel)
     if q0 or ss.get("rv_new"):
-        with st.expander("Edit the selected row", expanded=True):
+        with st.expander("Edit the selected question", expanded=True):
             review_form(ds, q0, rows, by_id, review.pages(ds), readonly)
     else:
         if "rv_fk" in ss:  # widget values of a form that is no longer shown are gone, so its saved state must go too
@@ -185,24 +192,23 @@ def edit_selected(ds: str, sel: str | None, rows: list[Question], readonly: bool
 # ---------------------------------------------------------------- 3. Questions
 
 def questions_page() -> None:
-    step_intro(3, "Write English questions from your material, then approve the good ones. Questions are checked "
-                  "against the document text, so every quote is real.")
+    step_intro(3, "Write English questions from your material, then approve the good ones. Every quote is checked against the document text.")
     ds, d, rows, readonly = open_dataset(allow_new=True)
     if ds is None:
         return
     s = settings.load()
     with st.expander("How many questions, and other options"):
         with st.form("generate_settings"):
-            st.write("Questions per subject, per type (0 switches a type off)")
+            st.write("Questions per subject for each type (0 turns a type off)")
             per_type = {t: st.number_input(t, min_value=0, value=s.questions_per_subject.get(t, 0), step=1) for t in QUESTION_TYPES}
-            st.write("Follow-ups per subject, per scenario")
+            st.write("Follow-up questions per subject for each scenario")
             per_sc = {sc: st.number_input(sc, min_value=0, value=s.follow_ups_per_subject.get(sc, 0), step=1) for sc in SCENARIOS}
-            over = st.number_input("Over-generation factor", min_value=1.0, max_value=5.0, value=float(s.overgenerate), step=0.1)
-            guidance = st.text_area("Generation guidance (optional)", value=s.generation_guidance)
-            judge = st.checkbox("Use AI judge checks (on questions, answers and translations; more accurate, much more expensive)",
+            over = st.number_input("Extra drafts (1.5 = write 50% more, so weak ones can be dropped)", min_value=1.0, max_value=5.0, value=float(s.overgenerate), step=0.1)
+            guidance = st.text_area("Extra instructions for the writing model (optional)", value=s.generation_guidance)
+            judge = st.checkbox("Also check with the checking model (more accurate, but costs much more)",
                                 value=s.judge_checks)
-            biggest = st.number_input("Largest document for the generator, in tokens", min_value=1000, value=s.gen_max_input_tokens, step=1000)
-            saved = st.form_submit_button("Save settings")
+            biggest = st.number_input("Largest document, in tokens", min_value=1000, value=s.gen_max_input_tokens, step=1000)
+            saved = st.form_submit_button("Save options")
         if saved:
             def save():
                 settings.save(settings.Settings.model_validate({
@@ -219,16 +225,17 @@ def questions_page() -> None:
     if not has_files:
         st.info("There is no material yet. Add a subject and files in step 2 first.")
     cands = sum(s.candidates(n) for n in [*s.questions_per_subject.values(), *s.follow_ups_per_subject.values()])
-    st.caption(f"Starting writes about {cands} candidate questions for each of {len(subjects)} subject(s), up to your targets. "
-               "Starting again on the same dataset only fills what is missing; raise the targets to get more.")
+    st.caption(f"This writes about {cands} draft questions for each of {len(subjects)} subject(s). "
+               "Running it again on the same dataset only adds what is missing. Raise the numbers above to get more.")
     name = st.text_input("Name for the new dataset (optional)", key="gen_name") if ds == NEW_DATASET else ""
     sent = privacy("privacy_generate")
+    why_disabled((not has_files, "Add material in step 2 first."), (not sent, NEED_TICK),
+                 (readonly and ds != NEW_DATASET, "This dataset cannot change right now."))
     if st.button("Start writing English questions", disabled=readonly and ds != NEW_DATASET or not sent or not has_files, type="primary"):
         target = ds if d else store.new_id(name.strip())
         (store.datasets_dir() / target).mkdir(parents=True, exist_ok=True)
         ss["goto_ds"] = target  # the dataset just started stays selected on every step
         start_job(MODULE, ["generate", "--yes", "--dataset", target])
-    st.caption(STOP_NOTE)
     if not d:
         return
     job_status(str(d))
@@ -238,43 +245,44 @@ def questions_page() -> None:
     shown = [r for r in shown if not r.is_translated]
     sel = show_table(ds, shown, "questions")
     q0 = edit_selected(ds, sel, rows, readonly, allow_new=True)
+    why_disabled((not q0, "Click a row in the table to approve or reject it."))
     a, b = st.columns(2)
     if a.button("Approve selected question", disabled=readonly or not q0):
         n = attempt(review.set_status, ds, [q0.id], "approved")[1]
-        flash("success" if n else "warning", "Approved." if n else "Not approved: it has a failed check or is already approved.")
+        flash("success" if n else "warning", "Approved." if n else "Not approved: it failed a check or was already approved.")
         st.rerun()
     if b.button("Reject selected question", disabled=readonly or not q0):
         n = attempt(review.set_status, ds, [q0.id], "rejected")[1]
         flash("success", f"Rejected {n} row(s).")
         st.rerun()
-    sure = st.checkbox(f"Yes, approve all {len(shown)} questions in the current filter that have no failed check", key="bulk_sure")
-    if st.button("Approve everything in the filter", disabled=readonly or not sure):
+    sure = st.checkbox(f"Yes, approve all {len(shown)} questions shown above that passed their checks", key="bulk_sure")
+    if st.button("Approve all shown questions", disabled=readonly or not sure):
         n = attempt(review.set_status, ds, [r.id for r in shown], "approved", True)[1]
         flash("success", f"Approved {n} question(s) in bulk. This count is recorded in the manifest.")
         st.rerun()
     ok, sm = attempt(review.summary, ds)
     if ok:
-        with st.expander("Counts and what is still short of your targets"):
+        with st.expander("Counts, and what is still missing"):
             st.write(f"{sm['total']} rows, {sm['approved']} approved source questions. Approved in bulk: {sm['bulk_approved']}. "
-                     f"Scenario labels corrected by the reviewer: {sm['scenario_overrides']}.")
+                     f"Scenario labels you corrected: {sm['scenario_overrides']}.")
             for title, key in (("Subject", "by_subject"), ("Type", "by_type"), ("Scenario", "by_scenario"),
                                ("Language", "by_language"), ("Status", "by_status")):
                 if sm[key]:
                     st.write(f"{title}: " + ", ".join(f"{k} {v}" for k, v in sm[key].items()))
             short = {sub: need for sub, need in sm["shortfall"].items() if need}
             if short:
-                st.warning("Approved so far against the targets, still needed: " + "; ".join(
+                st.warning("Still needed to reach your numbers: " + "; ".join(
                     f"{sub}: " + ", ".join(f"{n} {k}" for k, n in need.items()) for sub, need in short.items()))
             elif rows:
-                st.success("Every target is met by approved questions.")
+                st.success("You have approved enough questions to reach every number.")
     next_step(STEPS[3])
 
 
 # ---------------------------------------------------------------- 4. Answers
 
 def answers_page() -> None:
-    step_intro(4, "For each approved question, write the English reference answer and its required facts (short key phrases), "
-                  "then approve them. Unanswerable questions need no answer.")
+    step_intro(4, "Write the English answer and the required facts (short key phrases) for each approved question, then approve them. "
+                  "Questions the material cannot answer need no answer.")
     ds, d, rows, readonly = open_dataset()
     if not ds or rows is None:
         return
@@ -286,33 +294,34 @@ def answers_page() -> None:
         return
     waiting = answer.todo(rows)
     st.write(f"{len(need)} approved questions need an answer: {sum(r.answer_status == 'approved' for r in need)} approved, "
-             f"{sum(r.answer_status == 'candidate' for r in need)} written and waiting for you, {len(waiting)} not written yet. "
+             f"{sum(r.answer_status == 'candidate' for r in need)} written and waiting for your review, {len(waiting)} not written yet. "
              f"{len(approved) - len(need)} unanswerable question(s) need none.")
     sent = privacy("privacy_answer")
+    why_disabled((not sent, NEED_TICK), (not waiting, "Every answer is already written."))
     if st.button("Write the missing answers", disabled=readonly or not sent or not waiting, type="primary"):
         start_job(MODULE, ["answer", "--yes"])
-    st.caption(STOP_NOTE)
 
     shown = filters(ds, need, [("Subject", "subject"), ("Type", "question_type"), ("Answer", "answer_status")])
     sel = show_table(ds, shown, "answers")
     q0 = edit_selected(ds, sel, rows, readonly)
     can = bool(q0) and q0.answerable and not q0.is_translated and q0.answer_status != "none"
-    if st.button("Approve the answer of the selected row", disabled=readonly or not can):
+    why_disabled((not can, "Click a row that has a written answer to approve it."))
+    if st.button("Approve the answer of the selected question", disabled=readonly or not can):
         n = attempt(review.set_answer_status, ds, [q0.id], "approved")[1]
-        flash("success" if n else "warning", "Answer approved." if n else "Not approved: it has a failed check or is already approved.")
+        flash("success" if n else "warning", "Answer approved." if n else "Not approved: it failed a check or was already approved.")
         st.rerun()
     ready = [r.id for r in shown if r.answer_status == "candidate" and not r.note]
-    sure_a = st.checkbox(f"Yes, approve the {len(ready)} written answers in the filter that have no failed check", key="bulk_ans_sure")
-    if st.button("Approve all written answers in the filter", disabled=readonly or not sure_a or not ready):
+    sure_a = st.checkbox(f"Yes, approve the {len(ready)} written answers shown above that passed their checks", key="bulk_ans_sure")
+    if st.button("Approve all written answers shown", disabled=readonly or not sure_a or not ready):
         n = attempt(review.set_answer_status, ds, ready, "approved")[1]
         flash("success", f"Approved {n} answer(s).")
         st.rerun()
     drafted = [r.id for r in shown if r.answer_status == "candidate"]
-    with st.expander("Not happy with the written answers? Write them again"):
-        again = st.checkbox(f"Yes, discard the {len(drafted)} written (not approved) answers in the filter", key="redo_sure")
+    with st.expander("Not happy with the written answers? Discard and rewrite them"):
+        again = st.checkbox(f"Yes, discard the {len(drafted)} written answers shown above that are not approved yet", key="redo_sure")
         if st.button("Discard written answers", disabled=readonly or not again or not drafted):
             n = attempt(review.clear_answers, ds, drafted)[1]
-            flash("success", f"Discarded {n} written answer(s). Press Write the missing answers to make them again.")
+            flash("success", f"Discarded {n} written answer(s). Press \"Write the missing answers\" to write them again.")
             st.rerun()
     next_step(STEPS[4])
 
@@ -320,8 +329,7 @@ def answers_page() -> None:
 # ---------------------------------------------------------------- 5. Translate
 
 def translate_page() -> None:
-    step_intro(5, "Translate the questions and answers into other languages. This step is optional: "
-                  "skip to step 6 if you only need English.")
+    step_intro(5, "Translate the questions and answers into other languages. Optional: skip to step 6 if English is enough.")
     ds, d, rows, readonly = open_dataset()
     if not ds or rows is None:
         return
@@ -333,29 +341,29 @@ def translate_page() -> None:
         return
     if "tr_langs" not in ss:
         ss["tr_langs"] = ", ".join(s.extra_langs)
-    typed = st.text_input("Translate into (language codes, separated by commas, for example th, zh)", key="tr_langs",
-                          disabled=readonly, help="Any code you type is passed to the model as the target language. "
-                          "English is the baseline and is left out. Use zh for Chinese.")
+    typed = st.text_input("Translate into (language codes separated by commas, for example th, zh)", key="tr_langs",
+                          disabled=readonly, help="The model translates into whatever you type here. English is the source, so leave it out. "
+                          "Use zh for Chinese.")
     gaps = [] if store.is_frozen(ds) else attempt(translate.missing, ds)[1] or []
     st.caption(f"{ready} questions have approved answers and will be translated. Translations still missing for the saved "
-               f"languages ({', '.join(s.extra_langs) or 'none'}): {len(gaps)}. Judged scores in a language carry a warning until "
-               "150 judge decisions are labelled by someone who reads it.")
+               f"languages ({', '.join(s.extra_langs) or 'none'}): {len(gaps)}. Scores in a language are marked \"not validated\" until "
+               "someone who reads it has checked 150 of the checking model's decisions.")
     sent = privacy("privacy_translate")
+    why_disabled((not typed.strip(), "Type at least one language code."), (not sent, NEED_TICK))
     if st.button("Translate", disabled=readonly or not sent or not typed.strip(), type="primary"):
         def save_langs():
             settings.save(settings.Settings.model_validate({**s.model_dump(), "extra_langs": translate.parse_langs(typed)}))
         if attempt(save_langs)[0]:
             start_job(MODULE, ["translate", "--yes"])
-    st.caption(STOP_NOTE)
     present = sorted({r.lang for r in rows if r.is_translated})
     if present and not readonly:
-        with st.expander("Discard translations to make them again"):
+        with st.expander("Discard translations and translate again"):
             gone = st.multiselect("Languages to discard", present, default=present, key="discard_langs")
             n = sum(1 for r in rows if r.is_translated and r.lang in gone)
-            sure_d = st.checkbox(f"Yes, delete {n} translated rows, including any I marked as reviewed", key="discard_sure")
+            sure_d = st.checkbox(f"Yes, delete {n} translated rows, including ones I marked as reviewed", key="discard_sure")
             if st.button("Discard translations", disabled=not sure_d or not gone):
                 got = attempt(review.discard_translations, ds, gone)[1]
-                flash("success", f"Discarded {got} translated row(s). Press Translate to make them again.")
+                flash("success", f"Discarded {got} translated row(s). Press \"Translate\" to translate again.")
                 st.rerun()
     translated = [r for r in rows if r.is_translated]
     if translated:
@@ -369,7 +377,7 @@ def translate_page() -> None:
 # ---------------------------------------------------------------- 6. Export
 
 def export_page() -> None:
-    step_intro(6, "Freeze the dataset and download dataset.csv. A frozen dataset cannot change, so evaluations stay comparable.")
+    step_intro(6, "Finish the dataset and download dataset.csv. A finished dataset is locked, so evaluation results stay comparable.")
     ds, d, rows, readonly = open_dataset()
     if not ds or rows is None:
         return
@@ -381,28 +389,28 @@ def export_page() -> None:
     left_out = sum(1 for r in rows if r.status == "approved" and not r.is_translated and not r.answer_ready)
     a, b, c2 = st.columns(3)
     a.metric("Questions that will be exported", c["ready"])
-    b.metric("Left out: approved but no approved answer", left_out)
+    b.metric("Left out (no approved answer)", left_out)
     c2.metric("Translations still missing", len(gaps))
     if left_out:
-        st.warning(f"{left_out} approved question(s) have no approved answer and will not be exported. Finish them in step 4.")
+        st.warning(f"{left_out} approved question(s) have no approved answer and will not be exported. Approve their answers in step 4.")
     if gaps:
-        st.warning("Some translations are missing, so freezing is refused. Run step 5 again, or remove the language from the "
-                   "box there.")
+        st.warning("Some translations are missing, so the dataset cannot be finished yet. Run step 5 again, or remove the language there.")
     if not frozen:
         sent = privacy("privacy_export") if s.judge_checks else True
-        if st.button("Freeze and write dataset.csv", disabled=readonly or not sent or not c["ready"] or bool(gaps), type="primary"):
+        why_disabled((not c["ready"], "No question has an approved answer yet."), (bool(gaps), "Translations are missing (see above)."),
+                     (not sent, NEED_TICK))
+        if st.button("Finish and write dataset.csv", disabled=readonly or not sent or not c["ready"] or bool(gaps), type="primary"):
             start_job(MODULE, ["freeze", "--yes"])
-        st.caption(STOP_NOTE)
     else:
         csv_path = d / "dataset.csv"
-        st.success(f"Frozen. The file is {csv_path}.")
+        st.success(f"Finished and locked. The file is {csv_path}.")
         if csv_path.exists():
             st.download_button("Download dataset.csv", csv_path.read_bytes(), file_name=f"{ds}.csv", mime="text/csv", type="primary")
         manifest = store.read_json(d / "manifest.json")
         if manifest:
             with st.expander("Manifest"):
                 st.json(manifest)
-        if st.button("Duplicate as draft to change it"):
+        if st.button("Copy as a new draft to change it"):
             ok, new = attempt(freeze.duplicate_as_draft, ds)
             if ok:
                 ss["goto_ds"] = new
@@ -424,7 +432,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
     ss["rv_fk"] = fk
     st.subheader("Edit question" if q0 else "New question")
     if q0 is None and not rows and not pmap:
-        st.info("This dataset has no pages, so a hand-written question cannot be checked yet.")
+        st.info("This dataset has no document pages yet, so a hand-written question cannot be checked.")
     if f"{fk}|init" not in ss:
         ss[f"{fk}|init"] = True
         ss[f"{fk}|question"] = q0.question if q0 else ""
@@ -445,23 +453,23 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
         if q0.is_translated and source:
             st.info(f"Source question ({source.lang}): {source.question}")
         if q0.closest_passage:
-            st.caption(f"Closest passage the judge found: {q0.closest_passage}")
+            st.caption(f"Closest passage the checking model found: {q0.closest_passage}")
         if q0.note:
-            st.error(f"A check failed on the last save: {q0.note}. The question stays a candidate until it passes.")
+            st.error(f"A check failed on the last save: {q0.note}. The question stays a draft until it passes.")
     question = st.text_area("Question", key=f"{fk}|question", disabled=readonly)
-    resolved = st.text_area("Resolved question (the same question made self-contained)", key=f"{fk}|resolved", disabled=readonly)
+    resolved = st.text_area("Standalone question (the same question, understandable without the chat history)", key=f"{fk}|resolved", disabled=readonly)
 
-    st.text_area("Reference answer (English; drafted by step 2)", key=f"{fk}|refans", disabled=readonly)
+    st.text_area("Reference answer (English; drafted in step 4)", key=f"{fk}|refans", disabled=readonly)
     if q0 and q0.answerable:
         st.caption(f"Answer status: {q0.answer_status}")
-    st.write("Required facts (short key phrases a correct answer must contain)")
+    st.write("Required facts (short phrases a correct answer must contain)")
     for i in list(ss[f"{fk}|kp"]):
         c1, c2 = st.columns([8, 1])
-        c1.text_area(f"Key point {i}", key=f"{fk}|kp{i}", label_visibility="collapsed", disabled=readonly)
+        c1.text_area(f"Required fact {i}", key=f"{fk}|kp{i}", label_visibility="collapsed", disabled=readonly)
         if c2.button("Remove", key=f"{fk}|kprm{i}", disabled=readonly):
             ss[f"{fk}|kp"].remove(i)
             st.rerun()
-    if st.button("Add key point", key=f"{fk}|kpadd", disabled=readonly):
+    if st.button("Add required fact", key=f"{fk}|kpadd", disabled=readonly):
         ss[f"{fk}|kp"].append(ss[f"{fk}|next"])
         ss[f"{fk}|kp{ss[f'{fk}|next']}"] = ""
         ss[f"{fk}|next"] += 1
@@ -484,7 +492,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
             st.text_area("Quote", key=f"{fk}|ev{i}|quote", disabled=readonly)
             options = [f"f{k}" for k in range(1, len(ss[f"{fk}|kp"]) + 1)]
             ss[f"{fk}|ev{i}|facts"] = [f for f in ss.get(f"{fk}|ev{i}|facts", []) if f in options]
-            st.multiselect("Supports required facts", options, key=f"{fk}|ev{i}|facts", disabled=readonly)
+            st.multiselect("Supports required facts (f1 = the first fact above)", options, key=f"{fk}|ev{i}|facts", disabled=readonly)
             if st.button("Remove evidence", key=f"{fk}|evrm{i}", disabled=readonly):
                 ss[f"{fk}|ev"].remove(i)
                 st.rerun()
@@ -511,9 +519,9 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
     previous, lang = (q0.previous_id, q0.lang) if q0 else (None, "en")
     if q0 is None:
         mine = [r for r in rows if r.subject == subject]
-        lang = st.text_input("Language of the question", value=mine[0].source_lang if mine else "en", key=f"{fk}|lang")
+        lang = st.text_input("Language of the question (code, for example en)", value=mine[0].source_lang if mine else "en", key=f"{fk}|lang")
         firsts = ["(none)", *[r.id for r in mine if r.answerable and not r.is_follow_up]]
-        previous = st.selectbox("First-turn question, for a follow-up", firsts, key=f"{fk}|prev")
+        previous = st.selectbox("First question this one follows up on (if any)", firsts, key=f"{fk}|prev")
         previous = None if previous == "(none)" else previous
     if st.button("Save", key=f"{fk}|save", disabled=readonly):
         points = [ss[f"{fk}|kp{i}"].strip() for i in ss[f"{fk}|kp"] if ss[f"{fk}|kp{i}"].strip()]
@@ -533,7 +541,7 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
             if ok:
                 purge(fk)
                 ss["rv_new"] = False
-                flash("warning" if reason else "success", f"Saved as a candidate: {reason}" if reason else "Saved.")
+                flash("warning" if reason else "success", f"Saved as a draft: {reason}" if reason else "Saved.")
                 st.rerun()
     if q0 and q0.is_translated and not q0.translation_reviewed and st.button("Mark translation reviewed", key=f"{fk}|rev", disabled=readonly):
         if attempt(review.mark_reviewed, ds, q0.id)[0]:
