@@ -1,8 +1,5 @@
 """Data generation commands: generate (questions), answer, translate, freeze (writes dataset.csv), and the app."""
 import argparse
-import subprocess
-import sys
-from pathlib import Path
 from urllib.parse import urlparse
 
 from .. import jobs, llm, store
@@ -62,9 +59,8 @@ def main(argv: list[str] | None = None) -> None:
             m = freeze.run(_dataset(a.dataset))
             print("frozen:", m["dataset_id"], "csv:", store.datasets_dir() / m["dataset_id"] / "dataset.csv")
         else:
-            app = Path(__file__).with_name("app.py")
-            subprocess.run([sys.executable, "-m", "streamlit", "run", str(app), "--server.address", "localhost"],
-                           cwd=store.ROOT, check=False)
+            from ..cli import open_app
+            open_app()
     except jobs.Busy as e:
         raise SystemExit(str(e))
     except jobs.Stopped:

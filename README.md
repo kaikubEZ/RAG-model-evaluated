@@ -30,11 +30,10 @@ Needs Python 3.11 or newer.
 python -m venv .venv
 .venv\Scriptsctivate          (Windows; on macOS/Linux: source .venv/bin/activate)
 pip install -e .[test]
-rageval-datagen app     # build and freeze a dataset (writes datasets/<id>/dataset.csv)
-rageval-eval app        # run the endpoint on a dataset.csv and score it
+rageval app             # one app, two features: dataset generation and auto evaluation
 ```
 
-The data-generation app opens in your browser. Its sidebar is the workflow, one numbered page per step:
+`rageval app` opens one app in your browser with two features, chosen at the top of the sidebar. **Feature 1: Dataset generation** is one numbered page per step:
 
 1. **Setup**: API key, address and model for question generation (any OpenAI-compatible API).
 2. **Material**: create a subject and upload PDFs (with a text layer), `.txt` or `.md` files.
@@ -43,7 +42,7 @@ The data-generation app opens in your browser. Its sidebar is the workflow, one 
 5. **Translate** (optional): type any language codes (`th, zh`) to translate questions and answers.
 6. **Export**: freeze the dataset and download `dataset.csv`.
 
-Every page says what to do, shows how far each step has got, and ends with a **Next** button. The evaluation app (`rageval-eval app`) is a separate, optional part: it runs a RAG endpoint on a `dataset.csv` and scores it.
+Every page says what to do, shows how far each step has got, and ends with a **Next** button. **Feature 2: Auto evaluation** is optional: it runs a RAG endpoint on a `dataset.csv` (from Feature 1 or any other source) and scores it, in five numbered steps.
 
 The program is two parts joined by the CSV in `docs/dataset-contract.md`. Data generation, in order: `rageval-datagen generate` (English questions), `answer` (English answers), `translate`, `freeze`. Evaluation: `rageval-eval run`, `score`, `compare`.
 

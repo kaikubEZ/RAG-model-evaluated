@@ -1,4 +1,4 @@
-"""The data-generation app, one numbered page per step: Setup, Material, Questions, Answers, Translate, Export."""
+"""Feature 1, dataset generation: one numbered page per step (Setup, Material, Questions, Answers, Translate, Export)."""
 
 import pandas as pd
 import streamlit as st
@@ -6,7 +6,7 @@ import streamlit as st
 from rageval import csvio, jobs, llm, settings, store
 from rageval.datagen import answer, freeze, material, review, translate
 from rageval.schema import QUESTION_TYPES, SCENARIOS, Question
-from rageval.ui import (STOP_NOTE, attempt, env_form, flash, job_status, privacy, purge, run_app, ss, start_job,
+from rageval.ui import (STOP_NOTE, attempt, env_form, flash, job_status, next_step, privacy, purge, ss, start_job,
                         test)
 
 MODULE = "rageval.datagen.cli"
@@ -77,13 +77,6 @@ STEPS = ["1. Setup", "2. Material", "3. Questions", "4. Answers", "5. Translate"
 
 def step_intro(n: int, text: str) -> None:
     st.caption(f"Step {n} of {len(STEPS)}. {text}")
-
-
-def next_step(name: str) -> None:
-    st.divider()
-    if st.button(f"Next: {name} →", key=f"next|{name}", type="primary"):
-        ss["goto_page"] = name
-        st.rerun()
 
 
 def dataset_bar(allow_new: bool = False) -> str | None:
@@ -547,5 +540,4 @@ def review_form(ds: str, q0: Question | None, rows: list[Question], by_id: dict,
             st.rerun()
 
 
-run_app(dict(zip(STEPS, [setup_page, material_page, questions_page, answers_page, translate_page, export_page])),
-        "rageval datagen")
+PAGES = dict(zip(STEPS, [setup_page, material_page, questions_page, answers_page, translate_page, export_page]))

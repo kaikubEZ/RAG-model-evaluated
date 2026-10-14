@@ -134,11 +134,19 @@ def env_form(keys: list[tuple[str, bool]], extra=None) -> None:
             st.success("Saved.")
 
 
-def run_app(pages: dict, title: str) -> None:
-    st.set_page_config(page_title=title, layout="wide")
+def next_step(name: str) -> None:
+    """A button that moves the sidebar to the page called `name`."""
+    st.divider()
+    if st.button(f"Next: {name} \u2192", key=f"next|{name}", type="primary"):
+        ss["goto_page"] = name
+        st.rerun()
+
+
+def run_app(pages: dict, key: str = "page") -> None:
+    """Draw the sidebar list of pages (one list per feature, kept in session state under `key`) and the chosen page."""
     if "goto_page" in ss:  # set by a Next button; the radio is not drawn yet, so its value can still be changed
-        ss["page"] = ss.pop("goto_page")
-    page = st.sidebar.radio("Page", list(pages), key="page")
+        ss[key] = ss.pop("goto_page")
+    page = st.sidebar.radio("Step", list(pages), key=key)
     st.title(page)
     show_flash()
     try:

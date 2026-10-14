@@ -1,4 +1,4 @@
-"""The evaluation app: Setup, Run and score, Results, Compare, Labelling. Pick a page in the sidebar."""
+"""Feature 2, auto evaluation: Setup, Run and score, Results, Compare, Labelling, as numbered steps."""
 import pandas as pd
 import streamlit as st
 
@@ -6,7 +6,7 @@ from rageval import jobs, llm, settings, store
 from rageval.evaluation import adapters, dataset, labels, report, stats
 from rageval.evaluation import run as run_mod
 from rageval.schema import Score
-from rageval.ui import (STOP_NOTE, attempt, env_form, job_status, newest_run, privacy, run_app, ss, start_job,
+from rageval.ui import (STOP_NOTE, attempt, env_form, job_status, newest_run, privacy, ss, start_job,
                         test)
 
 MODULE = "rageval.evaluation.cli"
@@ -25,6 +25,7 @@ def _endpoint(s) -> dict:
 
 
 def setup_page() -> None:
+    st.caption("Step 1 of 5. Tell the program which model judges the answers and where your RAG endpoint is. You only do this once.")
     env_form(ENV_KEYS, _endpoint)
     st.subheader("Test connection")
     st.caption("Each test sends one tiny request.")
@@ -63,6 +64,7 @@ def runs_table() -> list[dict]:
 
 
 def run_page() -> None:
+    st.caption("Step 2 of 5. Pick a dataset.csv, ask every question to your RAG endpoint, then score the answers.")
     frozen = dataset.ids()[::-1]
     if not frozen:
         st.info("No dataset.csv yet. Freeze one with rageval-datagen, or copy a datasets/<id>/dataset.csv here.")
@@ -110,6 +112,7 @@ def scored_runs() -> list[str]:
 
 
 def results_page() -> None:
+    st.caption("Step 3 of 5. Read the scores of a finished run.")
     ids = scored_runs()
     if not ids:
         st.info("No scored run yet. Start and score a run on the Run and score page.")
@@ -218,6 +221,7 @@ def question_table(rid: str) -> None:
 # ---------------------------------------------------------------- Compare
 
 def compare_page() -> None:
+    st.caption("Step 4 of 5. Compare two scored runs on the same dataset to see whether a change helped.")
     ids = scored_runs()
     if len(ids) < 2:
         st.info("Comparing needs two scored runs on the same frozen dataset.")
@@ -240,6 +244,7 @@ def compare_page() -> None:
 # ---------------------------------------------------------------- Labelling
 
 def labelling_page() -> None:
+    st.caption("Step 5 of 5. Optional. Check the judge against your own labels so you know how far to trust its scores.")
     judge_tab, matcher_tab = st.tabs(["Judge decisions", "Matcher pairs"])
     with judge_tab:
         judge_labelling()
@@ -341,5 +346,5 @@ def matcher_labelling() -> None:
     st.json(labels.matcher_rates())
 
 
-run_app({"Setup": setup_page, "Run and score": run_page, "Results": results_page, "Compare": compare_page,
-         "Labelling": labelling_page}, "rageval evaluation")
+STEPS = ["1. Setup", "2. Run and score", "3. Results", "4. Compare", "5. Labelling"]
+PAGES = dict(zip(STEPS, [setup_page, run_page, results_page, compare_page, labelling_page]))

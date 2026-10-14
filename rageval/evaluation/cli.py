@@ -1,8 +1,5 @@
 """Evaluation commands: run, score, compare, and the app. Reads datasets/<id>/dataset.csv only."""
 import argparse
-import subprocess
-import sys
-from pathlib import Path
 from urllib.parse import urlparse
 
 from .. import jobs, llm, store
@@ -55,9 +52,8 @@ def main(argv: list[str] | None = None) -> None:
             from . import report
             print(report.compare_markdown(report.compare(a.run_a, a.run_b, primary=a.primary, only=a.only)))
         else:
-            app = Path(__file__).with_name("app.py")
-            subprocess.run([sys.executable, "-m", "streamlit", "run", str(app), "--server.address", "localhost"],
-                           cwd=store.ROOT, check=False)
+            from ..cli import open_app
+            open_app()
     except jobs.Busy as e:
         raise SystemExit(str(e))
     except jobs.Stopped:

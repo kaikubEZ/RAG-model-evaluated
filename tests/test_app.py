@@ -13,10 +13,11 @@ from rageval.datagen import material, review
 from rageval.schema import Answer, Evidence, Page, Question, Score
 
 EN = "abcdefghijklmnopqrstuvwxyz"
-ROOT_DIR = Path(__file__).resolve().parent.parent / "rageval"
-APPS = {"datagen": ROOT_DIR / "datagen" / "app.py", "evaluation": ROOT_DIR / "evaluation" / "app.py"}
+APP = str(Path(__file__).resolve().parent.parent / "rageval" / "app.py")
+FEATURES = {"datagen": "Feature 1: Dataset generation", "evaluation": "Feature 2: Auto evaluation"}
 PAGES = [("datagen", n) for n in ("1. Setup", "2. Material", "3. Questions", "4. Answers", "5. Translate", "6. Export")] + [
-    ("evaluation", n) for n in ("Setup", "Run and score", "Results", "Compare", "Labelling")]
+    ("evaluation", n) for n in ("1. Setup", "2. Run and score", "3. Results", "4. Compare", "5. Labelling")]
+EVAL_ONLY = {"2. Run and score", "3. Results", "4. Compare", "5. Labelling"}
 ENV_KEYS = ["GEN_AI_API_KEY", "GEN_AI_URL", "GEN_AI_MODEL", "JUDGE_AI_API_KEY", "JUDGE_AI_URL", "JUDGE_AI_MODEL",
             "RAG_API_KEY", "RAG_URL"]
 
@@ -256,9 +257,10 @@ def test_summary_counts_and_shortfall(root):
 # ---------------------------------------------------------------- app
 
 def page(name, app=None, **session):
-    app = app or ("datagen" if name[0].isdigit() else "evaluation")
-    at = AppTest.from_file(str(APPS[app]), default_timeout=60)
-    at.session_state["page"] = name
+    app = app or ("evaluation" if name in EVAL_ONLY else "datagen")
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state["feature"] = FEATURES[app]
+    at.session_state[f"page|{app}"] = name
     for k, v in session.items():
         at.session_state[k] = v
     return at.run()
@@ -289,8 +291,8 @@ def test_every_page_renders(root, kind, app, name):
 def test_empty_project_says_what_to_do_next(root):
     assert "Create one above" in page("2. Material").info[0].value
     assert "no dataset yet" in page("4. Answers").info[0].value
-    assert "No dataset.csv" in page("Run and score").info[0].value
-    assert "No scored run" in page("Results").info[0].value
+    assert "No dataset.csv" in page("2. Run and score").info[0].value
+    assert "No scored run" in page("3. Results").info[0].value
 
 
 def test_review_form_opens_for_a_new_question_and_saves_it(root):
@@ -312,14 +314,14 @@ def test_review_form_opens_for_a_new_question_and_saves_it(root):
 
 def test_results_show_the_scored_run_and_compare_refuses_other_datasets(root):
     state(root, "scored")
-    at = page("Results")
+    at = page("3. Results")
     assert not at.exception and not at.error
     assert any("Headline" in s.value for s in at.subheader)
     second = make_dataset(frozen=True, ds="20260103-000000")
     make_run(second, "20260104-000000-second")
     mismatch = store.runs_dir() / "20260104-000000-second" / "manifest.json"
     store.write_json(mismatch, {**store.read_json(mismatch), "dataset_sha256": "different"})
-    at = page("Compare")
+    at = page("4. Compare")
     assert not at.exception
     assert "different datasets" in at.error[0].value
 
@@ -387,7 +389,7 @@ def test_next_button_moves_to_the_next_step(root):
     state(root, "draft")
     at = page("3. Questions")
     next(b for b in at.button if b.label.startswith("Next: 4. Answers")).click().run()
-    assert at.session_state["page"] == "4. Answers" and not at.exception
+    assert at.session_state["page|datagen"] == "4. Answers" and not at.exception
 
 
 def test_review_table_shows_the_answer_and_evidence(root):
@@ -405,3 +407,15 @@ def test_review_table_shows_the_answer_and_evidence(root):
     facts, groups = json.loads(first["required_facts_json"]), json.loads(first["evidence_json"])
     assert facts[0]["fact_id"] == "f1" and groups[0]["alternatives"][0]["document_id"] == "law/a.txt"
     assert first["answer status"] == "candidate"
+
+
+def test_one_app_switches_between_the_two_features(root):
+    at = page("1. Setup", "datagen")
+    assert not at.exception, [e.value for e in at.exception]
+    assert [r.label for r in at.radio] == ["Feature", "Step"]
+    assert at.radio[1].options[:3] == ["1. Setup", "2. Material", "3. Questions"]
+    assert any(w.label == "GEN_AI_MODEL" for w in at.text_input)
+    at.radio[0].set_value(FEATURES["evaluation"]).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.radio[1].options == ["1. Setup", "2. Run and score", "3. Results", "4. Compare", "5. Labelling"]
+    assert any(w.label == "RAG_URL" for w in at.text_input) and not any(w.label == "GEN_AI_MODEL" for w in at.text_input)
