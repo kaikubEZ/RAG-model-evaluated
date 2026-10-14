@@ -15,7 +15,7 @@ from rageval.schema import Answer, Evidence, Page, Question, Score
 EN = "abcdefghijklmnopqrstuvwxyz"
 ROOT_DIR = Path(__file__).resolve().parent.parent / "rageval"
 APPS = {"datagen": ROOT_DIR / "datagen" / "app.py", "evaluation": ROOT_DIR / "evaluation" / "app.py"}
-PAGES = [("datagen", n) for n in ("Setup", "Material", "Generate", "Review")] + [
+PAGES = [("datagen", n) for n in ("1. Setup", "2. Material", "3. Questions", "4. Answers", "5. Translate", "6. Export")] + [
     ("evaluation", n) for n in ("Setup", "Run and score", "Results", "Compare", "Labelling")]
 ENV_KEYS = ["GEN_AI_API_KEY", "GEN_AI_URL", "GEN_AI_MODEL", "JUDGE_AI_API_KEY", "JUDGE_AI_URL", "JUDGE_AI_MODEL",
             "RAG_API_KEY", "RAG_URL"]
@@ -256,7 +256,7 @@ def test_summary_counts_and_shortfall(root):
 # ---------------------------------------------------------------- app
 
 def page(name, app=None, **session):
-    app = app or ("evaluation" if name in ("Run and score", "Results", "Compare", "Labelling") else "datagen")
+    app = app or ("datagen" if name[0].isdigit() else "evaluation")
     at = AppTest.from_file(str(APPS[app]), default_timeout=60)
     at.session_state["page"] = name
     for k, v in session.items():
@@ -287,15 +287,15 @@ def test_every_page_renders(root, kind, app, name):
 
 
 def test_empty_project_says_what_to_do_next(root):
-    assert "Create one above" in page("Material").info[0].value
-    assert "Generate page" in page("Review").info[0].value
+    assert "Create one above" in page("2. Material").info[0].value
+    assert "no dataset yet" in page("4. Answers").info[0].value
     assert "No dataset.csv" in page("Run and score").info[0].value
     assert "No scored run" in page("Results").info[0].value
 
 
 def test_review_form_opens_for_a_new_question_and_saves_it(root):
     state(root, "draft")
-    at = page("Review", rv_new=True)
+    at = page("3. Questions", rv_new=True)
     assert not at.exception, [e.value for e in at.exception]
     fk = "rv|20260101-000000|new"
     at.session_state[f"{fk}|question"] = "What is new?"
@@ -325,7 +325,7 @@ def test_results_show_the_scored_run_and_compare_refuses_other_datasets(root):
 
 
 def test_setup_saves_env_and_settings(root):
-    at = page("Setup")
+    at = page("1. Setup")
     assert not at.exception
     by_label = {w.label: w for w in at.text_input}
     by_label["GEN_AI_URL"].input("https://api.example.test/v1")
@@ -345,16 +345,18 @@ def test_translate_step_takes_any_language_codes_the_user_types(root, monkeypatc
         with pytest.raises(ValueError):
             translate.parse_langs(bad)
     state(root, "draft")
+    ds = "20260101-000000"
+    store.write_jsonl(store.datasets_dir() / ds / "candidates.jsonl", [r.model_copy(update={"status": "approved"}) for r in review.load(ds)])
     monkeypatch.setenv("GEN_AI_URL", "https://api.example.test/v1")
     monkeypatch.setenv("GEN_AI_API_KEY", "k")
     monkeypatch.setenv("GEN_AI_MODEL", "m")
     started = []
     monkeypatch.setattr(jobs, "start_detached", lambda module, args: started.append(args))
-    at = page("Review")
+    at = page("5. Translate")
     assert not at.exception, [e.value for e in at.exception]
     box = next(w for w in at.text_input if w.label.startswith("Translate into"))
     box.input("th, zh").run()
-    next(c for c in at.checkbox if c.key == "privacy_review").check().run()
+    next(c for c in at.checkbox if c.key == "privacy_translate").check().run()
     next(b for b in at.button if b.label == "Translate").click().run()
     assert not at.exception and not at.error
     assert settings.load().extra_langs == ["th", "zh"] and started == [["translate", "--yes"]]
@@ -364,18 +366,28 @@ def test_translate_step_takes_any_language_codes_the_user_types(root, monkeypatc
     assert "Not a language code" in at.error[0].value and settings.load().extra_langs == ["th", "zh"]
 
 
-def test_generate_page_lists_new_dataset_and_old_drafts(root):
+def test_every_step_shares_one_dataset_picker_with_a_new_option_on_step_3(root):
     state(root, "draft")
     make_dataset(ds="20260103-000000")
     make_dataset(frozen=True, ds="20260104-000000")
-    at = page("Generate")
+    at = page("3. Questions")
     assert not at.exception, [e.value for e in at.exception]
-    box = next(b for b in at.selectbox if b.label == "Dataset to generate into")
-    assert box.options[0] == "New dataset" and len(box.options) == 3  # the frozen dataset is not offered
+    box = next(b for b in at.selectbox if b.label == "Dataset")
+    assert box.options[0] == "+ New dataset" and len(box.options) == 4
     assert box.value == "20260103-000000"  # the newest unfinished draft is the default
-    assert "2 questions so far" in box.format_func(box.value)
+    assert "2 rows" in box.format_func(box.value) and "frozen" in box.format_func("20260104-000000")
     box.select("New dataset").run()
     assert any(w.label.startswith("Name for the new dataset") for w in at.text_input)
+    other = page("4. Answers", ds="20260101-000000")  # the choice is kept in session state across steps
+    assert next(b for b in other.selectbox if b.label == "Dataset").value == "20260101-000000"
+    assert "+ New dataset" not in next(b for b in other.selectbox if b.label == "Dataset").options
+
+
+def test_next_button_moves_to_the_next_step(root):
+    state(root, "draft")
+    at = page("3. Questions")
+    next(b for b in at.button if b.label.startswith("Next: 4. Answers")).click().run()
+    assert at.session_state["page"] == "4. Answers" and not at.exception
 
 
 def test_review_table_shows_the_answer_and_evidence(root):
@@ -384,7 +396,7 @@ def test_review_table_shows_the_answer_and_evidence(root):
     rows = review.load(ds)
     store.write_jsonl(store.datasets_dir() / ds / "candidates.jsonl", [
         rows[0].model_copy(update={"reference_answer": "THE REFERENCE ANSWER", "answer_status": "candidate"}), rows[1]])
-    at = page("Review")
+    at = page("3. Questions")
     assert not at.exception, [e.value for e in at.exception]
     df = at.dataframe[0].value
     assert list(df.columns[:len(csvio.COLUMNS)]) == csvio.COLUMNS  # the contract's columns, in its order

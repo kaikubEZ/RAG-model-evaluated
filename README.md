@@ -34,14 +34,16 @@ rageval-datagen app     # build and freeze a dataset (writes datasets/<id>/datas
 rageval-eval app        # run the endpoint on a dataset.csv and score it
 ```
 
-The app opens in your browser and walks through every step:
+The data-generation app opens in your browser. Its sidebar is the workflow, one numbered page per step:
 
-1. **Setup** — API key, address and model for question generation (any OpenAI-compatible API), optionally a separate judge model, and your RAG endpoint.
-2. **Material** — create a subject and upload PDFs (with a text layer), `.txt` or `.md` files.
-3. **Generate** — choose how many questions of each kind and which extra languages, then start.
-4. **Review** — edit, approve or reject questions; translate; freeze the set.
-5. **Run and score** — ask the frozen questions to your endpoint and score the answers.
-6. **Results**, **Compare**, **Labelling** — read the report, compare two runs, and check the judge against your own labels.
+1. **Setup**: API key, address and model for question generation (any OpenAI-compatible API).
+2. **Material**: create a subject and upload PDFs (with a text layer), `.txt` or `.md` files.
+3. **Questions**: write English questions from the material, then approve the good ones.
+4. **Answers**: write the English reference answer and required facts for each approved question, then approve them.
+5. **Translate** (optional): type any language codes (`th, zh`) to translate questions and answers.
+6. **Export**: freeze the dataset and download `dataset.csv`.
+
+Every page says what to do, shows how far each step has got, and ends with a **Next** button. The evaluation app (`rageval-eval app`) is a separate, optional part: it runs a RAG endpoint on a `dataset.csv` and scores it.
 
 The program is two parts joined by the CSV in `docs/dataset-contract.md`. Data generation, in order: `rageval-datagen generate` (English questions), `answer` (English answers), `translate`, `freeze`. Evaluation: `rageval-eval run`, `score`, `compare`.
 

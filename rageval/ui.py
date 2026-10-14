@@ -136,6 +136,8 @@ def env_form(keys: list[tuple[str, bool]], extra=None) -> None:
 
 def run_app(pages: dict, title: str) -> None:
     st.set_page_config(page_title=title, layout="wide")
+    if "goto_page" in ss:  # set by a Next button; the radio is not drawn yet, so its value can still be changed
+        ss["page"] = ss.pop("goto_page")
     page = st.sidebar.radio("Page", list(pages), key="page")
     st.title(page)
     show_flash()
